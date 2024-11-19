@@ -65,9 +65,8 @@ def record(filename = None, record_duration = 3):
         try:
             audiobuffer = stream.read(buffer_size)
             signal = np.frombuffer(audiobuffer, dtype=np.float32)
-    
             
-            confidence = pitch_o.get_confidence()
+            #confidence = pitch_o.get_confidence()
             pitch = round(pitch_o(signal)[0])
             
             if pitch >= 40 and pitch <= 85:
