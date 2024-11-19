@@ -249,8 +249,8 @@ cur.execute("CREATE TABLE final_score_log_v1(Date TIMESTAMP, GameID INTEGER, Tim
     - Audio (contains recording and device stuff)
         - Possibly turn into a class so uses the same pyaudio initialisation?
     - Database (all SQL stuff)
-    
-        
+- Fix 'The system cannot find the path specified.' error
+- Re-record 1st to 5th without saying 'string'
     
     
 
