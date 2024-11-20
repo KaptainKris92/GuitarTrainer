@@ -158,6 +158,23 @@ def insert_final_score(game_id, time_per_guess, trials, num_correct):
     cur.close()
     con.close()
 
+def get_best_score(time_per_guess, trials, num_correct):
+    con = sqlite3.connect("score_database.db",
+                          detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+    cur = con.cursor()
+    
+    previous_best = cur.execute(f"SELECT MAX(TotalCorrect) FROM final_score_log_v1\
+                WHERE TimerPerGuess = {time_per_guess} AND TotalTrials = {trials}").fetchall()[0][0]
+                                
+    cur.close()
+    con.close()
+    
+    if num_correct > previous_best:
+        return "New high score!"
+    elif num_correct == previous_best:
+        return "Matched previous best."
+    else: 
+        return f"Previous best: {previous_best}/{trials}"
 
 
 def play_game(time_per_guess = 10, trials = 10):
@@ -214,11 +231,21 @@ def play_game(time_per_guess = 10, trials = 10):
             
         except ValueError :
             print("No note played.")
+            insert_trial(game_id, 
+                         time_per_guess, 
+                         trials, 
+                         i + 1, 
+                         string, 
+                         low_high, 
+                         note, 
+                         None, 
+                         False)
             
-    insert_final_score(game_id, time_per_guess, trials, num_correct)    
-    print(f"Game over.\n{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.")
+        
+    print(f"Game over.\n{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.\n{get_best_score(time_per_guess, trials, num_correct)}")
+    insert_final_score(game_id, time_per_guess, trials, num_correct)
            
-play_game(5, 15)
+play_game(3, 15)
 '''
 # Saving to database
 con = sqlite3.connect("score_database.db")
