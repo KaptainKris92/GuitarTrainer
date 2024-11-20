@@ -176,6 +176,33 @@ def get_best_score(time_per_guess, trials, num_correct):
     else: 
         return f"Previous best: {previous_best}/{trials}"
 
+def get_top_5_incorrect():
+    con = sqlite3.connect("score_database.db",
+                          detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+    cur = con.cursor()
+    
+    most_incorrect = cur.execute("SELECT TargetString, TargetLowHigh, TargetNote, COUNT(*) AS total_incorrect FROM\
+                                score_log_v1\
+                                WHERE IsCorrect = 0\
+                                GROUP BY TargetString, TargetLowHigh, TargetNote\
+                                ORDER BY total_incorrect DESC\
+                                LIMIT 5;"
+                                ).fetchall()
+                                
+    cur.close()
+    con.close()
+    
+    most_incorrect.join(" ")
+    
+    joined_incorrect = []
+    for i in most_incorrect:
+        joined_incorrect.append("".join(str(i[0:3])).replace("'", "").replace(",", "").replace("(" , "").replace(")", "") + f": {str(i[3])} incorrect")
+        
+    top_5_incorrect = '\n'.join(joined_incorrect)
+        
+    print(f"Top 5 incorrect notes:\n{top_5_incorrect}")    
+    
+    
 
 def play_game(time_per_guess = 10, trials = 10):
     
@@ -246,6 +273,9 @@ def play_game(time_per_guess = 10, trials = 10):
     insert_final_score(game_id, time_per_guess, trials, num_correct)
            
 play_game(3, 15)
+
+
+
 '''
 # Saving to database
 con = sqlite3.connect("score_database.db")
@@ -270,14 +300,14 @@ cur.execute("CREATE TABLE final_score_log_v1(Date TIMESTAMP, GameID INTEGER, Tim
 #############
 
 - Make a UI
-- Separate into files
+- Separate into files/modules
     - Main (contains game logic?)    
     - Audio (contains recording and device stuff)
         - Possibly turn into a class so uses the same pyaudio initialisation?
     - Database (all SQL stuff)
 - Fix 'The system cannot find the path specified.' error
 - Re-record 1st to 5th without saying 'string'
-    
+- Clean up the functions using SQL so there is less repetition.
     
 
 
