@@ -218,7 +218,7 @@ def play_game(time_per_guess = 10, trials = 10):
     insert_final_score(game_id, time_per_guess, trials, num_correct)    
     print(f"Game over.\n{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.")
            
-play_game(5, 10)
+play_game(5, 15)
 '''
 # Saving to database
 con = sqlite3.connect("score_database.db")
