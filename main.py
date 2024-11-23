@@ -23,9 +23,9 @@ def show_devices(device_type = None):
     output_device_list = []
     for i in range(0, numdevices):
         if (p.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels')) > 0:
-            input_device_list.append("Input Device id " + str(i) + " - " + p.get_device_info_by_host_api_device_index(0, i).get('name'))            
+            input_device_list.append("Input Device " + str(i) + " - " + p.get_device_info_by_host_api_device_index(0, i).get('name'))            
         if (p.get_device_info_by_index(i).get('maxOutputChannels')) > 0:
-            output_device_list.append("Output Device id " + str(i) + " - " + p.get_device_info_by_index(i).get('name'))
+            output_device_list.append("Output Device " + str(i) + " - " + p.get_device_info_by_index(i).get('name'))
             
     
     if device_type == "input":
@@ -38,7 +38,7 @@ def show_devices(device_type = None):
         return "Invalid device type. Please select 'input', 'output', or None"
     
 
-def record(filename = None, record_duration = 3):
+def record(filename = None, record_duration = 3, input_device_id = 3):
     # initialise pyaudio
     p = pyaudio.PyAudio()
     
@@ -53,7 +53,7 @@ def record(filename = None, record_duration = 3):
                     rate=samplerate,
                     input=True,
                     frames_per_buffer=buffer_size,
-                    input_device_index=3,
+                    input_device_index=input_device_id,
                     output_device_index=7)
     
 
@@ -213,7 +213,7 @@ def get_top_5_incorrect():
     
     
 
-def play_game(time_per_guess = 10, trials = 10):
+def play_game(input_device_id = 3, time_per_guess = 10, trials = 10):
     
     num_correct = 0
     game_id = get_current_gameid()
@@ -229,7 +229,7 @@ def play_game(time_per_guess = 10, trials = 10):
         playsound(f'./sounds/{note}.mp3')        
         sleep(0.1)
         playsound('./sounds/clack.mp3')
-        played_notes = record(record_duration = time_per_guess)
+        played_notes = record(record_duration = time_per_guess, input_device_id = input_device_id)
         
         try:
             median_note = int(np.median(played_notes))
