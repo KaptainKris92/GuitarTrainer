@@ -9,23 +9,34 @@ import pyaudio # Audio input
 import aubio # Note recognition
 from playsound import playsound # For playing sound files. Has to be version 1.2.2 to work
 
-
 # Database
 import datetime
 import sqlite3
 
-
-def print_devices():
+def show_devices(device_type = None):
     p = pyaudio.PyAudio()
     
     info = p.get_host_api_info_by_index(0)
     numdevices = info.get('deviceCount')
     
+    input_device_list = []
+    output_device_list = []
     for i in range(0, numdevices):
         if (p.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels')) > 0:
-            print("Input Device id ", i, " - ", p.get_device_info_by_host_api_device_index(0, i).get('name'))
+            input_device_list.append("Input Device id " + str(i) + " - " + p.get_device_info_by_host_api_device_index(0, i).get('name'))            
         if (p.get_device_info_by_index(i).get('maxOutputChannels')) > 0:
-            print("Output Device id ", i, " - ", p.get_device_info_by_index(i).get('name'))
+            output_device_list.append("Output Device id " + str(i) + " - " + p.get_device_info_by_index(i).get('name'))
+            
+    
+    if device_type == "input":
+        return input_device_list
+    elif device_type == "output":
+        return output_device_list
+    elif device_type is None: 
+        return input_device_list + output_device_list
+    elif device_type not in ["input", "output", None]:
+        return "Invalid device type. Please select 'input', 'output', or None"
+    
 
 def record(filename = None, record_duration = 3):
     # initialise pyaudio
@@ -270,7 +281,7 @@ def play_game(time_per_guess = 10, trials = 10):
     print(f"Game over.\n{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.\n{get_best_score(time_per_guess, trials, num_correct)}")
     insert_final_score(game_id, time_per_guess, trials, num_correct)
            
-play_game(3, 15)
+#play_game(3, 15)
 
 
 
@@ -299,7 +310,8 @@ cur.execute("CREATE TABLE final_score_log_v1(Date TIMESTAMP, GameID INTEGER, Tim
 
 - Make a UI
 - Separate into files/modules
-    - Main (contains game logic?)    
+    - Main     
+    - Games (contains game logic)
     - Audio (contains recording and device stuff)
         - Possibly turn into a class so uses the same pyaudio initialisation?
     - Database (all SQL stuff)
@@ -311,12 +323,17 @@ cur.execute("CREATE TABLE final_score_log_v1(Date TIMESTAMP, GameID INTEGER, Tim
 - Other statistics, e.g. total times played, average percentage correct, most correct notes.
 
 
-    
+------------------
+| Arpeggios game |
+------------------
 
+------------------
+| Intervals game |
+------------------
 
-----------------------------
-| Create app for arpeggios |
-----------------------------
+------------------
+| Scales game ?? |
+------------------
 
 
     
