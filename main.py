@@ -96,7 +96,7 @@ def record(filename = None, record_duration = 3):
 
 
 
-with open('guitar_note_dictionary_nums.pkl', 'rb') as f:
+with open('guitar_note_dictionary.pkl', 'rb') as f:
     #pickle.dump(guitar_note_dictionary, f)
     guitar_note_dictionary = pickle.load(f)
     
@@ -191,8 +191,6 @@ def get_top_5_incorrect():
                                 
     cur.close()
     con.close()
-    
-    most_incorrect.join(" ")
     
     joined_incorrect = []
     for i in most_incorrect:
@@ -308,7 +306,9 @@ cur.execute("CREATE TABLE final_score_log_v1(Date TIMESTAMP, GameID INTEGER, Tim
 - Fix 'The system cannot find the path specified.' error
 - Re-record 1st to 5th without saying 'string'
 - Clean up the functions using SQL so there is less repetition.
-    
+- If database doesn't exist in folder, write code to create one. 
+- Write function for plotting how many times got each note incorrect (as a proportion/percentage of total times note was targeted?)
+- Other statistics, e.g. total times played, average percentage correct, most correct notes.
 
 
     
