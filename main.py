@@ -13,6 +13,7 @@ from playsound import playsound # For playing sound files. Has to be version 1.2
 import datetime
 import sqlite3
 
+
 def show_devices(device_type = None):
     p = pyaudio.PyAudio()
     
