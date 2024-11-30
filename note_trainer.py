@@ -11,12 +11,11 @@ import aubio  # Note recognition
 from playsound import playsound
 
 # Database
-from sql_funcs import SqlConnector
+from sql_funcs import get_current_game_id, insert_trial, insert_final_score, get_best_score
 
 
 class NoteTrainer():
-    def __init__(self, input_device):
-        self.p = pyaudio.PyAudio()
+    def __init__(self, input_device):        
         self.input_device = input_device            
 
         with open('guitar_note_dictionary.pkl', 'rb') as f:
@@ -30,13 +29,14 @@ class NoteTrainer():
 
     def record(self, filename=None, record_duration=3):
         # initialise pyaudio
+        p = pyaudio.PyAudio()
         # open stream
         buffer_size = 1024
         pyaudio_format = pyaudio.paFloat32
         n_channels = 1
         samplerate = 44100
 
-        stream = self.p.open(format=pyaudio_format,
+        stream = p.open(format=pyaudio_format,
                              channels=n_channels,
                              rate=samplerate,
                              input=True,
@@ -85,7 +85,7 @@ class NoteTrainer():
 
         stream.stop_stream()
         stream.close()
-        self.p.terminate()
+        p.terminate()
 
         return notes_played
 
@@ -95,10 +95,9 @@ class NoteTrainer():
                 return k
 
     def play_game(self, time_per_guess=10, trials=10):
-        
-        #sqlc = SqlConnector()
+                
         num_correct = 0
-        #game_id = sqlc.get_current_game_id()
+        game_id = get_current_game_id()
 
         for i in range(trials):
             string = rc(list(self.guitar_note_dictionary.keys()))
@@ -122,46 +121,46 @@ class NoteTrainer():
                     playsound('./sounds/correct.mp3')                    
                     print("Correct!")
                     num_correct += 1
-                   # sqlc.insert_trial(game_id,
-                    #                  time_per_guess,
-                     #                 trials,
-                      #                i + 1,
-                       #               string,
-                        #              low_high,
-                         #             note,
-                          #            note,
-                           #           True)
+                    insert_trial(game_id,
+                                      time_per_guess,
+                                      trials,
+                                      i + 1,
+                                      string,
+                                      low_high,
+                                      note,
+                                      note,
+                                      True)
                 else:
                     playsound('./sounds/incorrect.mp3')
                     incorrect_note = self.find_note(median_note)
                     playsound('./sounds/you_played.mp3')
                     playsound(f'./sounds/{incorrect_note}.mp3')
                     print(f"Incorrect. You played {incorrect_note}.")
-                   # sqlc.insert_trial(game_id,
-                    #                  time_per_guess,
-                     #                 trials,
-                      #                i + 1,
-                       #               string,
-                        #              low_high,
-                         #             note,
-                          #            incorrect_note,
-                           #           False)
+                    insert_trial(game_id,
+                                      time_per_guess,
+                                      trials,
+                                      i + 1,
+                                      string,
+                                      low_high,
+                                      note,
+                                      incorrect_note,
+                                      False)
 
             except ValueError:
                 print("No note played.")
-               # sqlc.insert_trial(game_id,
-                #                  time_per_guess,
-                 #                 trials,
-                  #                i + 1,
-                   #               string,
-                    #              low_high,
-                     #             note,
-                      #            None,
-                       #           False)
-        #print(f"Game over.\n{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.")
-        #print(f"Game over.\n{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.\n{sqlc.get_best_score(time_per_guess, trials, num_correct)}")
-        #sqlc.insert_final_score(game_id, time_per_guess, trials, num_correct)
-        #sqlc.close_con()
+                insert_trial(game_id,
+                                  time_per_guess,
+                                  trials,
+                                  i + 1,
+                                  string,
+                                  low_high,
+                                  note,
+                                  None,
+                                  False)
+        
+        print(f"Game over.\n{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.\n{get_best_score(time_per_guess, trials, num_correct)}")
+        insert_final_score(game_id, time_per_guess, trials, num_correct)
+    
 
 
 
