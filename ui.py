@@ -1,12 +1,14 @@
-from main import show_devices, play_game
-from tkinter import *
+from note_trainer import NoteTrainer
+from get_device_list import DeviceLister
+from tkinter import Entry, Frame, LEFT, Canvas, Label
 import ttkbootstrap as tb
 from PIL import Image, ImageTk
 
 class MainMenu:
     def __init__(self):
+        self.dl = DeviceLister()
         self.root = tb.Window(themename = "superhero")
-        self.input_devices = show_devices("input")
+        self.input_devices = self.dl.show_devices("input")
         self.root.title("Guitar Trainer")
         self.root.geometry("1000x500")
         
@@ -24,7 +26,8 @@ class MainMenu:
         
         # Set default device
         self.device_combo.current(2)
-
+        
+        
         # Bind combobox - Automatically sets the selection when clicked, instead of requiring a button press.
         #device_combo.bind("<<ComboboxSelected>>", click_bind)
 
@@ -69,6 +72,13 @@ class MainMenu:
                             bootstyle = "danger")
         incorrect_btn.pack(side = LEFT, anchor = 'center', pady=5)
         
+        self.exit_btn = tb.Button(self.root,
+                                  text = "Quit",
+                                  command = self.exit_app,
+                                  bootstyle = "Danger"
+                                  )
+        self.exit_btn.pack()
+        
         self.trial_number = 0
         self.circles_exist = False
                 
@@ -77,16 +87,21 @@ class MainMenu:
         device_id = self.input_devices.index(self.device_combo.get())
         self.device_label.config(text = f"Device {device_id} selected")
         
+    '''
     # Automatic selection binding on click of combobox option.
     # e = event
     def click_bind(self, e):
         self.device_label.config(text = f"{device_combo.get()} selected")
+    '''
         
     def play_button_action(self):
         time_per_guess = int(self.time_per_guess_input.get())
         trials = int(self.trials_input.get())
         device_id = self.input_devices.index(self.device_combo.get())
-        #play_game(input_device_id = device_id, time_per_guess = time_per_guess, trials = trials)
+        
+        nt = NoteTrainer(device_id)        
+        nt.play_game(input_device_id = device_id, time_per_guess = time_per_guess, trials = trials)
+        
         self.display_circles(trials)
 
     
@@ -153,11 +168,17 @@ class MainMenu:
         
         if self.trial_number == total_trials:
             print ("Done")
-            self.trial_number = 0
-            
+            self.trial_number = 0    
+    
     def start(self):
         #root.mainloop()
         self.root.mainloop()
+        
+    def exit_app(self):
+        self.root.destroy()
+        
+        
+    
         
         
 if __name__ == '__main__':
