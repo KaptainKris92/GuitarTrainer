@@ -1,6 +1,6 @@
 from note_trainer import NoteTrainer
 from get_device_list import DeviceLister
-from tkinter import Entry, Frame, LEFT, Canvas, Label
+from tkinter import Entry, Frame, Canvas, Label
 import ttkbootstrap as tb
 from PIL import Image, ImageTk
 from sql_funcs import get_current_game_id, insert_trial, insert_final_score, get_best_score
@@ -66,13 +66,13 @@ class MainMenu:
                                 text="Correct",
                                 command=self.correct,
                                 bootstyle="success")
-        self.correct_btn.pack(side=LEFT, anchor='center', pady=5)
+        self.correct_btn.pack(side='left', anchor='center', pady=5)
 
         self.incorrect_btn = tb.Button(self.button_frame,
                                   text="Incorrect",
                                   command=self.incorrect,
                                   bootstyle="danger")
-        self.incorrect_btn.pack(side=LEFT, anchor='center', pady=5)
+        self.incorrect_btn.pack(side='left', anchor='center', pady=5)
 
         self.exit_btn = tb.Button(self.root,
                                   text="Quit",
@@ -172,7 +172,7 @@ class MainMenu:
         for i in range(circle_num):
             ec_label = Label(self.circle_frame, image=ec,
                              borderwidth=0, highlightthickness=0)
-            ec_label.pack(side=LEFT, padx=0, anchor='center', expand=True)
+            ec_label.pack(side='left', padx=0, anchor='center', expand=True)
             
         self.root.update()
 
