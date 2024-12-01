@@ -19,7 +19,11 @@ class MainMenu(tb.window.Window):
         y = (screen_height / 2) - (app_height / 2)
         
         self.geometry(f"{app_width}x{app_height}+{int(x)}+{int(y)}")
-        #self.geometry(f"{app_width}x{app_height}")
+        
+        mm_title = tb.Label(self,
+                                  text = "Guitar Trainer",
+                                  font = ("Helvetica", 28))
+        mm_title.pack(pady = 10)
 
         # Select input device
         self.dl = DeviceLister()
@@ -29,7 +33,7 @@ class MainMenu(tb.window.Window):
         self.device_label = tb.Label(
             self, text="Select input device", font=("Helvetica", 18)
         )
-        self.device_label.pack(pady=30)  # Specify padding
+        self.device_label.pack(pady=5)  # Specify padding
 
         self.device_combo = tb.Combobox(self,
                                         values=self.input_devices,

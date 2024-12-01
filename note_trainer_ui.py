@@ -23,6 +23,11 @@ class NoteTrainerUI(tb.window.Toplevel):
         self.geometry(f"{app_width}x{app_height}+{int(x)}+{int(y)}")   
         #self.geometry(f"{app_width}x{app_height}")
         
+        ntp_title = tb.Label(self,
+                                  text = "Note Trainer",
+                                  font = ("Helvetica", 28))
+        ntp_title.pack(pady=5)
+        
         self.time_per_guess_label = tb.Label(self, 
                                              text="Select time per guess (seconds)", 
                                              font=("Helvetica", 18))
