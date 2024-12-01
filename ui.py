@@ -173,6 +173,8 @@ class MainMenu:
             ec_label = Label(self.circle_frame, image=ec,
                              borderwidth=0, highlightthickness=0)
             ec_label.pack(side=LEFT, padx=0, anchor='center', expand=True)
+            
+        self.root.update()
 
         # print(type(circle_frame.winfo_children()[1]))
 
@@ -194,10 +196,13 @@ class MainMenu:
 
         print("Correct!")
         self.trial_number += 1
+        
+        self.root.update()
 
         if self.trial_number == total_trials:
             print("Done")
             self.trial_number = 0
+            
 
     def incorrect(self):
         self.trial_number
@@ -216,6 +221,8 @@ class MainMenu:
 
         print("Incorrect :(")
         self.trial_number += 1
+        
+        self.root.update()
 
         if self.trial_number == total_trials:
             print("Done")
