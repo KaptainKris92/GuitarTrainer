@@ -3,6 +3,7 @@ from get_device_list import DeviceLister
 from tkinter import Entry, Frame, LEFT, Canvas, Label
 import ttkbootstrap as tb
 from PIL import Image, ImageTk
+from sql_funcs import get_current_game_id, insert_trial, insert_final_score, get_best_score
 
 
 class MainMenu:
@@ -99,13 +100,58 @@ class MainMenu:
         time_per_guess = int(self.time_per_guess_input.get())
         trials = int(self.trials_input.get())
         device_id = self.input_devices.index(self.device_combo.get())
+        
+        self.display_circles(trials)
+        # Note game logic
+        num_correct = 0
+        game_id = get_current_game_id()
 
         nt = NoteTrainer(device_id)
-        trial_log = []
-        trial_log.append(nt.play_game(
-            time_per_guess=time_per_guess, trials=trials))
-
-        self.display_circles(trials)
+        
+        for i in range(trials):
+            result = nt.play_game(time_per_guess)
+            
+            if result['correct']:
+                self.correct()
+                num_correct += 1
+                insert_trial(game_id,
+                                  time_per_guess,
+                                  trials,
+                                  i + 1,
+                                  result['string'],
+                                  result['low_high'],
+                                  result['note'],
+                                  result['played_note'],
+                                  True)
+                
+            elif not result['correct']:
+                self.incorrect()
+                
+                insert_trial(game_id,
+                             time_per_guess,
+                             trials,
+                             i + 1,
+                             result['string'],
+                             result['low_high'],
+                             result['note'],
+                             result['played_note'],
+                             False)
+            
+            elif result['correct'] is None:
+                self.incorrect()
+                
+                insert_trial(game_id,
+                             time_per_guess,
+                             trials,
+                             i + 1,
+                             result['string'],
+                             result['low_high'],
+                             result['note'],
+                             result['played_note'],
+                             False)
+                            
+        print(f"Game over.\n{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.\n{get_best_score(time_per_guess, trials, num_correct)}")
+        insert_final_score(game_id, time_per_guess, trials, num_correct)
 
     def display_circles(self, circle_num=10):
         self.circles_exist

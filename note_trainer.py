@@ -94,72 +94,55 @@ class NoteTrainer():
             if val in v:
                 return k
 
-    def play_game(self, time_per_guess=10, trials=10):
-                
-        num_correct = 0
-        game_id = get_current_game_id()
+    def play_game(self, time_per_guess=10):
+                        
+        string = rc(list(self.guitar_note_dictionary.keys()))
+        low_high = rc(list(self.guitar_note_dictionary[string].keys()))
+        note = rc(
+            list(self.guitar_note_dictionary[string][low_high].keys()))
 
-        for i in range(trials):
-            string = rc(list(self.guitar_note_dictionary.keys()))
-            low_high = rc(list(self.guitar_note_dictionary[string].keys()))
-            note = rc(
-                list(self.guitar_note_dictionary[string][low_high].keys()))
+        print(f"Play {string} string, {low_high} {note}.")
+        playsound(f'./sounds/{string}.mp3')
+        playsound(f'./sounds/{low_high}.mp3')
+        playsound(f'./sounds/{note}.mp3')
+        sleep(0.1)
+        playsound('./sounds/clack.mp3')
+        played_notes = self.record(record_duration=time_per_guess)
 
-            print(f"Play {string} string, {low_high} {note}.")
-            playsound(f'./sounds/{string}.mp3')
-            playsound(f'./sounds/{low_high}.mp3')
-            playsound(f'./sounds/{note}.mp3')
-            sleep(0.1)
-            playsound('./sounds/clack.mp3')
-            played_notes = self.record(record_duration=time_per_guess)
+        try:
+            median_note = int(np.median(played_notes))
 
-            try:
-                median_note = int(np.median(played_notes))
+            if median_note == self.guitar_note_dictionary[string][low_high][note]:
 
-                if median_note == self.guitar_note_dictionary[string][low_high][note]:
-
-                    playsound('./sounds/correct.mp3')                    
-                    print("Correct!")
-                    num_correct += 1
-                    insert_trial(game_id,
-                                      time_per_guess,
-                                      trials,
-                                      i + 1,
-                                      string,
-                                      low_high,
-                                      note,
-                                      note,
-                                      True)
-                else:
-                    playsound('./sounds/incorrect.mp3')
-                    incorrect_note = self.find_note(median_note)
-                    playsound('./sounds/you_played.mp3')
-                    playsound(f'./sounds/{incorrect_note}.mp3')
-                    print(f"Incorrect. You played {incorrect_note}.")
-                    insert_trial(game_id,
-                                      time_per_guess,
-                                      trials,
-                                      i + 1,
-                                      string,
-                                      low_high,
-                                      note,
-                                      incorrect_note,
-                                      False)
-
-            except ValueError:
-                print("No note played.")
-                insert_trial(game_id,
-                                  time_per_guess,
-                                  trials,
-                                  i + 1,
-                                  string,
-                                  low_high,
-                                  note,
-                                  None,
-                                  False)
+                playsound('./sounds/correct.mp3')                       
+                print("Correct!")
+                return {'correct': True,
+                        'string': string,
+                        'low_high': low_high,
+                        'note': note,
+                        'played_note': note}
+                         
+            else:
+                playsound('./sounds/incorrect.mp3')
+                incorrect_note = self.find_note(median_note)
+                playsound('./sounds/you_played.mp3')
+                playsound(f'./sounds/{incorrect_note}.mp3')                
+                print(f"Incorrect. You played {incorrect_note}.")
+                return {'correct': False,
+                        'string': string,
+                        'low_high': low_high,
+                        'note': note,
+                        'played_note': incorrect_note}
         
-        print(f"Game over.\n{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.\n{get_best_score(time_per_guess, trials, num_correct)}")
-        insert_final_score(game_id, time_per_guess, trials, num_correct)
+
+        except ValueError:            
+            print("No note played.")
+            return {'correct': None,
+                    'string': string,
+                    'low_high': low_high,
+                    'note': note,
+                    'played_note': None}          
+        
     
 
 
