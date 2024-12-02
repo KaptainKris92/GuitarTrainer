@@ -42,8 +42,8 @@ class NoteTrainerScoreUI(tb.window.Toplevel):
         self.table_columns = [
             {"text": "Date", "stretch": False},
             {"text": "Game ID", "stretch": False},
-            {"text": "Time per guess (s)", "stretch": False},
-            {"text": "Trials", "stretch": False},
+            #{"text": "Time per guess (s)", "stretch": False},
+            #{"text": "Trials", "stretch": False},
             {"text": "# Correct", "stretch": False}
         ]
 
@@ -79,7 +79,7 @@ class NoteTrainerScoreUI(tb.window.Toplevel):
         # Replace highscores datetime with formatted version
         formatted_highscores = []
         for i, j in zip(dates_formatted, highscores):
-            formatted_highscores.append((i, j[1], j[2], j[3], j[4]))
+            formatted_highscores.append((i, j[1], j[4]))
             
         self.row_data = formatted_highscores
         self.highscore_table.build_table_data(coldata = self.table_columns, rowdata=self.row_data)        

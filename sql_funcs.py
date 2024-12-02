@@ -149,19 +149,16 @@ def create_incorrect_bar_chart(top_n):
     ax.set_ylabel("Notes")
 
     return plt
-    
-    
-    
-
+      
 
 def get_trial_time_combos():
     con = sqlite3.connect("score_database.db",
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
 
-    trial_time_combos = cur.execute("SELECT DISTINCT TotalTrials, TimerPerGuess\
-                                 FROM\
-                                final_score_log"
+    trial_time_combos = cur.execute("SELECT DISTINCT TotalTrials AS DT, TimerPerGuess AS TPG\
+                                    FROM final_score_log\
+                                        ORDER BY DT DESC, TPG ASC"
                                     ).fetchall()
     return trial_time_combos
 
