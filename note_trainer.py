@@ -93,14 +93,20 @@ class NoteTrainer():
         for k, v in self.all_note_dictionary.items():
             if val in v:
                 return k
-
-    def play_game(self, time_per_guess=10):
-                        
+    
+    def random_note(self):
         string = rc(list(self.guitar_note_dictionary.keys()))
         low_high = rc(list(self.guitar_note_dictionary[string].keys()))
         note = rc(
             list(self.guitar_note_dictionary[string][low_high].keys()))
-
+        
+        return {'string': string, 
+                'low_high': low_high,
+                'note': note}
+    
+    def play_game(self, time_per_guess=10, string=None, low_high=None, note=None):
+        
+                        
         print(f"Play {string} string, {low_high} {note}.")
         playsound(f'./sounds/{string}.mp3')
         playsound(f'./sounds/{low_high}.mp3')

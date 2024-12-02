@@ -55,7 +55,7 @@ class NoteTrainerUI(tb.window.Toplevel):
         self.string_frame.pack(anchor = 'center', pady=5, padx=10)
         
         self.string_num_label = tb.Label(self.string_frame,
-                                         text = "Xth",
+                                         text = "",
                                          font = ("Arial", 30))
         self.string_num_label.pack(side = 'left', padx=5)
         
@@ -65,12 +65,12 @@ class NoteTrainerUI(tb.window.Toplevel):
         self.string_label.pack(side = 'left', padx=0)
         
         self.low_high_label = tb.Label(self.string_frame,
-                                     text = "high",
+                                     text = "",
                                      font = ("Arial", 30))
         self.low_high_label.pack(side = 'left', padx=5)
         
         self.note_label = tb.Label(self.string_frame,
-                                     text = "A#",
+                                     text = "",
                                      font = ("Arial", 30))
         self.note_label.pack(side = 'left', padx=5)
         
@@ -119,7 +119,15 @@ class NoteTrainerUI(tb.window.Toplevel):
         nt = NoteTrainer(device_id)
         
         for i in range(trials):
-            result = nt.play_game(time_per_guess)
+            random_note = nt.random_note()
+            self.change_text(random_note['string'],
+                             random_note['low_high'],
+                             random_note['note']
+                             )
+            result = nt.play_game(time_per_guess, 
+                                  string = random_note['string'],
+                                  low_high = random_note['low_high'],
+                                  note = random_note['note'])
             
             if result['correct']:
                 self.correct()
@@ -188,6 +196,14 @@ class NoteTrainerUI(tb.window.Toplevel):
         self.update()
 
         # print(type(circle_frame.winfo_children()[1]))
+        
+    def change_text(self, string, low_high, note):
+        self.string_num_label.config(text=f"{string}")
+        self.low_high_label.config(text=f"{low_high}")
+        self.note_label.config(text=f"{note}")
+        self.update()
+        pass
+        
 
     def correct(self):
         self.trial_number
