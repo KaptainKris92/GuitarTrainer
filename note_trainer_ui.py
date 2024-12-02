@@ -28,50 +28,45 @@ class NoteTrainerUI(tb.window.Toplevel):
                                   font = ("Helvetica", 28))
         ntp_title.pack(pady=5)
         
-        self.time_per_guess_label = tb.Label(self, 
+        time_per_guess_label = tb.Label(self, 
                                              text="Select time per guess (seconds)", 
                                              font=("Helvetica", 18))
-        self.time_per_guess_label.pack(pady=5)  # Specify padding
+        time_per_guess_label.pack(pady=5)  # Specify padding
 
         self.time_per_guess_input = tb.Entry(self)
         self.time_per_guess_input.pack(pady=5)
         self.time_per_guess_input.insert(0, "1")
 
-        self.trials_label = tb.Label(
+        trials_label = tb.Label(
             self, text="Select number of trials", font=("Helvetica", 18))
-        self.trials_label.pack(pady=5)  # Specify padding
+        trials_label.pack(pady=5)  # Specify padding
 
         self.trials_input = tb.Entry(self)
         self.trials_input.pack(pady=5)
         self.trials_input.insert(0, "10")
 
-        self.play_btn = tb.Button(self,
-                                  text="Play",
-                                  command=self.play_button_action,
-                                  style="success.TButton")
-        self.play_btn.pack(pady=5)
+        play_btn = tb.Button(self,
+                             text="Play",
+                             command=self.play_button_action,
+                             style="success.TButton")
+        play_btn.pack(pady=5)
         
-        self.string_frame = tb.Frame(self)
-        self.string_frame.pack(anchor = 'center', pady=5, padx=10)
+        string_frame = tb.Frame(self)
+        string_frame.pack(anchor = 'center', pady=5, padx=10)
         
-        self.string_num_label = tb.Label(self.string_frame,
+        self.string_num_label = tb.Label(string_frame,
                                          text = "",
                                          font = ("Arial", 30))
-        self.string_num_label.pack(side = 'left', padx=5)
+        self.string_num_label.pack(side = 'left', padx=5)        
         
-        self.string_label = tb.Label(self.string_frame,
-                                     text = "string",
-                                     font = ("Arial", 30))
-        self.string_label.pack(side = 'left', padx=0)
-        
-        self.low_high_label = tb.Label(self.string_frame,
+        self.low_high_label = tb.Label(string_frame,
                                      text = "",
                                      font = ("Arial", 30))
         self.low_high_label.pack(side = 'left', padx=5)
         
-        self.note_label = tb.Label(self.string_frame,
-                                     text = "",
-                                     font = ("Arial", 30))
+        self.note_label = tb.Label(string_frame,
+                                   text = "",
+                                   font = ("Arial", 30))
         self.note_label.pack(side = 'left', padx=5)
         
         
@@ -79,32 +74,30 @@ class NoteTrainerUI(tb.window.Toplevel):
         
 
         self.circle_frame = tb.Frame(self)
-        self.circle_frame.pack(anchor='center', pady=10)
-
-        self.button_frame = tb.Frame(self)
-        self.button_frame.pack(anchor='center', pady=10)
-
-        self.correct_btn = tb.Button(self.button_frame,
-                                text="Correct",
-                                command=self.correct,
-                                style="success.TButton")
-        #self.correct_btn.pack(side='left', anchor='center', pady=5)
-
-        self.incorrect_btn = tb.Button(self.button_frame,
-                                  text="Incorrect",
-                                  command=self.incorrect,
-                                  style="danger.TButton")
-        #self.incorrect_btn.pack(side='left', anchor='center', pady=5)
+        self.circle_frame.pack(anchor='center', pady=5)
+                
         
-        self.mm_btn = tb.Button(self,
-                                text = "Main menu",
-                                command = self.go_main_menu,
-                                style="primary.TButton"
-                                )
-        self.mm_btn.pack()
+        high_scores_btn = tb.Button(self,
+                                    text = "High scores",
+                                    command=self.show_highscores,
+                                    style = "secondary.TButton")
+        high_scores_btn.pack(pady=5)
+        
+        worst_notes_btn = tb.Button(self,
+                                    text = "Most incorrect notes",
+                                    command=self.show_worst_notes,
+                                    style = "secondary.TButton")
+        worst_notes_btn.pack(pady=5)
+        
+        mm_btn = tb.Button(self,
+                           text = "Main menu",
+                           command = self.go_main_menu,
+                           style="primary.TButton"
+                           )
+        mm_btn.pack(pady=5)
         
         self.trial_number = 0
-        self.circles_exist = False
+        self.circles_exist = False        
         
     def play_button_action(self):
         time_per_guess = int(self.time_per_guess_input.get())
@@ -168,6 +161,7 @@ class NoteTrainerUI(tb.window.Toplevel):
                              result['played_note'],
                              False)
                             
+        self.show_best_score(num_correct, trials, time_per_guess)
         print(f"Game over.\n{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.\n{get_best_score(time_per_guess, trials, num_correct)}")
         insert_final_score(game_id, time_per_guess, trials, num_correct)
 
@@ -198,12 +192,10 @@ class NoteTrainerUI(tb.window.Toplevel):
         # print(type(circle_frame.winfo_children()[1]))
         
     def change_text(self, string, low_high, note):
-        self.string_num_label.config(text=f"{string}")
+        self.string_num_label.config(text=f"{string} string")        
         self.low_high_label.config(text=f"{low_high}")
         self.note_label.config(text=f"{note}")
-        self.update()
-        pass
-        
+        self.update()        
 
     def correct(self):
         self.trial_number
@@ -228,8 +220,7 @@ class NoteTrainerUI(tb.window.Toplevel):
 
         if self.trial_number == total_trials:
             print("Done")
-            self.trial_number = 0
-            
+            self.trial_number = 0            
 
     def incorrect(self):
         self.trial_number
@@ -254,7 +245,23 @@ class NoteTrainerUI(tb.window.Toplevel):
         if self.trial_number == total_trials:
             print("Done")
             self.trial_number = 0
+            
+    def show_best_score(self, num_correct, trials, time_per_guess):
+        print(f"Game over.\n{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.\n{get_best_score(time_per_guess, trials, num_correct)}")
+        self.string_num_label.config(text="Game over.",
+                                     font = ("Arial", 20))        
+        self.low_high_label.config(text=f"{num_correct}/{trials} ({round(num_correct/trials * 100)}%) correct.",
+                                   font = ("Arial", 20))
+        self.note_label.config(text=f"{get_best_score(time_per_guess, trials, num_correct)}",
+                               font = ("Arial", 20))
+        self.update()
         
+    def show_highscores(self):
+        pass        
+    
+    def show_worst_notes(self):
+        pass
+    
     def go_main_menu(self):
         self.main_menu.deiconify()
         self.withdraw()

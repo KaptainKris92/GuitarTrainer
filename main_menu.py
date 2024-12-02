@@ -43,7 +43,7 @@ class MainMenu(tb.window.Window):
         self.select_device_btn = tb.Button(self,
                                            text="Select device",
                                            command=self.device_confirmation,
-                                           style="danger.TButton")
+                                           style="success.TButton")
         self.select_device_btn.pack(pady=5)
 
         # Set default device
