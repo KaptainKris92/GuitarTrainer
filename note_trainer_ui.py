@@ -1,4 +1,5 @@
 from note_trainer import NoteTrainer
+from note_trainer_score_ui import NoteTrainerScoreUI
 from sql_funcs import get_current_game_id, insert_trial, insert_final_score, get_best_score
 from PIL import Image, ImageTk
 import ttkbootstrap as tb
@@ -15,13 +16,10 @@ class NoteTrainerUI(tb.window.Toplevel):
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight() 
         
-        # Calculating where to put top-left corner of window
-        # Middle point of screen minus (w & h of app / 2)
         x = (screen_width / 2) - (app_width / 2)
         y = (screen_height / 2) - (app_height / 2)
         
         self.geometry(f"{app_width}x{app_height}+{int(x)}+{int(y)}")   
-        #self.geometry(f"{app_width}x{app_height}")
         
         ntp_title = tb.Label(self,
                                   text = "Note Trainer",
@@ -257,7 +255,8 @@ class NoteTrainerUI(tb.window.Toplevel):
         self.update()
         
     def show_highscores(self):
-        pass        
+        ntsui = NoteTrainerScoreUI(self)
+        self.withdraw()        
     
     def show_worst_notes(self):
         pass

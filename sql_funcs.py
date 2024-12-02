@@ -98,17 +98,22 @@ def get_best_score(time_per_guess, trials, num_correct):
         return f"Previous best: {previous_best}/{trials}"
 
 
-def get_top_5_incorrect():
+def get_top_incorrect(top_n = None):
     con = sqlite3.connect("score_database.db",
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
+    
+    if top_n is None:
+        limit_n = ""
+    else:
+        limit_n = f"LIMIT {top_n}"
 
-    most_incorrect = cur.execute("SELECT TargetString, TargetLowHigh, TargetNote, COUNT(*) AS total_incorrect FROM\
+    most_incorrect = cur.execute(f"SELECT TargetString, TargetLowHigh, TargetNote, COUNT(*) AS total_incorrect FROM\
                                 score_log\
                                 WHERE IsCorrect = 0\
                                 GROUP BY TargetString, TargetLowHigh, TargetNote\
                                 ORDER BY total_incorrect DESC\
-                                LIMIT 5;"
+                                {limit_n};"
                                  ).fetchall()
 
     joined_incorrect = []
@@ -116,9 +121,10 @@ def get_top_5_incorrect():
         joined_incorrect.append("".join(str(i[0:3])).replace("'", "").replace(
             ",", "").replace("(", "").replace(")", "") + f": {str(i[3])} incorrect")
 
-    top_5_incorrect = '\n'.join(joined_incorrect)
+    top_incorrect = '\n'.join(joined_incorrect)
 
-    print(f"Top 5 incorrect notes:\n{top_5_incorrect}")
+    return most_incorrect    
+    print(f"Top {top_n} incorrect notes:\n{top_incorrect}")
 
 
 def get_trial_time_combos():

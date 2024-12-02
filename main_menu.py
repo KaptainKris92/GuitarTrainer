@@ -64,16 +64,13 @@ class MainMenu(tb.window.Window):
         self.exit_btn.pack(pady=5)
 
     def device_confirmation(self):
-        # device_label.config(text = f"{device_combo.get()} selected")
         device_id = self.input_devices.index(self.device_combo.get())
         self.device_label.config(text=f"Device {device_id} selected")
         
     def launch_note_trainer(self):
         ntp = NoteTrainerUI(self.input_devices.index(self.device_combo.get()), self)
         self.withdraw()        
-        #ntp.mainloop()
-        
-        
+                
     def exit_app(self):
         self.destroy() 
         self.quit()
