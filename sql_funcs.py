@@ -2,7 +2,8 @@
 import datetime
 import sqlite3
 import os.path
-
+#import numpy as np
+import matplotlib.pyplot as plt
 
 def create_database():
     # Probably a more efficient way of using the connection/cursor
@@ -125,6 +126,32 @@ def get_top_incorrect(top_n = None):
 
     return most_incorrect    
     print(f"Top {top_n} incorrect notes:\n{top_incorrect}")
+    
+def create_incorrect_bar_chart(top_n):
+    incorrect_notes = get_top_incorrect(top_n)
+        
+    incorrect_notes_dict = {str(x[0:3]).replace("('", "").replace(")","").replace("'","").replace(",",""): int(x[3]) for x in incorrect_notes}
+    
+    notes = list(incorrect_notes_dict.keys())
+    values = list(incorrect_notes_dict.values())
+    
+    fig, ax = plt.subplots(figsize=(16,9))
+    
+    ax.barh(notes, values, align='center')
+    
+    # Show top values
+    ax.invert_yaxis()
+    
+    plt.xticks(range(0, max(values)))
+    plt.margins(y = 0.01)
+    
+    ax.set_xlabel("# incorrect")
+    ax.set_ylabel("Notes")
+
+    return plt
+    
+    
+    
 
 
 def get_trial_time_combos():
