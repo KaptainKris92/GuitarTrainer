@@ -132,17 +132,13 @@ def get_trial_time_combos():
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
 
-    trial_time_combos = cur.execute("SELECT DISTINCT TimerPerGuess, TotalTrials\
+    trial_time_combos = cur.execute("SELECT DISTINCT TotalTrials, TimerPerGuess\
                                  FROM\
                                 final_score_log"
                                     ).fetchall()
-    string_list = []        
-    for i in trial_time_combos:
-        string_list.append(f"Trials: {i[1]} | Time per trial: {i[0]}")
-        
-    return string_list
+    return trial_time_combos
 
-def get_highscore(trials, time_per_guess):
+def get_highscores(trials, time_per_guess):
     con = sqlite3.connect("score_database.db",
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
