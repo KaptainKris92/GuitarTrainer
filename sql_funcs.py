@@ -142,6 +142,19 @@ def get_trial_time_combos():
         
     return string_list
 
+def get_highscore(trials, time_per_guess):
+    con = sqlite3.connect("score_database.db",
+                          detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+    cur = con.cursor()
+
+    highscores = cur.execute(f"SELECT * FROM final_score_log\
+                                    WHERE TimerPerGuess = {time_per_guess}\
+                                        AND TotalTrials = {trials}\
+                                            ORDER BY TotalCorrect DESC, GameID"
+                                            ).fetchall()    
+    return highscores
+    
+
 
 
 if not os.path.isfile("score_database.db"):

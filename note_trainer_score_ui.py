@@ -1,5 +1,5 @@
 import ttkbootstrap as tb
-from sql_funcs import get_trial_time_combos, get_top_incorrect
+from sql_funcs import get_trial_time_combos
 
 class NoteTrainerScoreUI(tb.window.Toplevel):
     def __init__(self, note_trainer_ui):
@@ -36,7 +36,11 @@ class NoteTrainerScoreUI(tb.window.Toplevel):
                              )
         back_btn.pack(pady=5)
         
+    def show_highscore(self, trials, time_per_guess):
+        pass       
+        
     def back_btn_action(self):    
         self.note_trainer_ui.deiconify()
         self.withdraw()
         pass
+    
