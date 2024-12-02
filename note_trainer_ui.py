@@ -50,6 +50,33 @@ class NoteTrainerUI(tb.window.Toplevel):
                                   command=self.play_button_action,
                                   style="success.TButton")
         self.play_btn.pack(pady=5)
+        
+        self.string_frame = tb.Frame(self)
+        self.string_frame.pack(anchor = 'center', pady=5, padx=10)
+        
+        self.string_num_label = tb.Label(self.string_frame,
+                                         text = "Xth",
+                                         font = ("Arial", 30))
+        self.string_num_label.pack(side = 'left', padx=5)
+        
+        self.string_label = tb.Label(self.string_frame,
+                                     text = "string",
+                                     font = ("Arial", 30))
+        self.string_label.pack(side = 'left', padx=0)
+        
+        self.low_high_label = tb.Label(self.string_frame,
+                                     text = "high",
+                                     font = ("Arial", 30))
+        self.low_high_label.pack(side = 'left', padx=5)
+        
+        self.note_label = tb.Label(self.string_frame,
+                                     text = "A#",
+                                     font = ("Arial", 30))
+        self.note_label.pack(side = 'left', padx=5)
+        
+        
+        
+        
 
         self.circle_frame = tb.Frame(self)
         self.circle_frame.pack(anchor='center', pady=10)
@@ -61,13 +88,13 @@ class NoteTrainerUI(tb.window.Toplevel):
                                 text="Correct",
                                 command=self.correct,
                                 style="success.TButton")
-        self.correct_btn.pack(side='left', anchor='center', pady=5)
+        #self.correct_btn.pack(side='left', anchor='center', pady=5)
 
         self.incorrect_btn = tb.Button(self.button_frame,
                                   text="Incorrect",
                                   command=self.incorrect,
                                   style="danger.TButton")
-        self.incorrect_btn.pack(side='left', anchor='center', pady=5)
+        #self.incorrect_btn.pack(side='left', anchor='center', pady=5)
         
         self.mm_btn = tb.Button(self,
                                 text = "Main menu",
