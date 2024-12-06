@@ -7,8 +7,8 @@ class MainMenu(tb.window.Window):
         super().__init__(title = "Guitar Trainer", themename="superhero")    
         #super(MainMenu, self).__init__(title = "Guitar Trainer")
 
-        app_width = 1000
-        app_height = 500
+        app_width = 1080
+        app_height = 720
         
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight() 

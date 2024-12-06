@@ -11,8 +11,8 @@ class NoteTrainerUI(tb.window.Toplevel):
         self.main_menu = main_menu
         self.input_device = input_device
         
-        app_width = 1000
-        app_height = 500
+        app_width = 1080
+        app_height = 720
         
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight() 

@@ -1,5 +1,5 @@
 import ttkbootstrap as tb
-from sql_funcs import create_incorrect_bar_chart, get_top_incorrect
+from sql_funcs import create_incorrect_bar_chart
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class NoteTrainerMissedNotesUI(tb.window.Toplevel):
@@ -10,8 +10,8 @@ class NoteTrainerMissedNotesUI(tb.window.Toplevel):
         
         self.note_trainer_ui = note_trainer_ui
 
-        app_width = 1000
-        app_height = 500
+        app_width = 1080
+        app_height = 720
 
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
