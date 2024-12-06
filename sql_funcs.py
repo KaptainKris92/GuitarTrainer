@@ -127,7 +127,7 @@ def get_top_incorrect(top_n = None):
     return most_incorrect    
     print(f"Top {top_n} incorrect notes:\n{top_incorrect}")
     
-def create_incorrect_bar_chart(top_n):
+def create_incorrect_bar_chart(top_n = None):
     incorrect_notes = get_top_incorrect(top_n)
         
     incorrect_notes_dict = {str(x[0:3]).replace("('", "").replace(")","").replace("'","").replace(",",""): int(x[3]) for x in incorrect_notes}
@@ -148,7 +148,7 @@ def create_incorrect_bar_chart(top_n):
     ax.set_xlabel("# incorrect")
     ax.set_ylabel("Notes")
 
-    return plt
+    return fig
       
 
 def get_trial_time_combos():
