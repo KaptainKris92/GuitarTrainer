@@ -1,5 +1,6 @@
 from note_trainer import NoteTrainer
 from note_trainer_score_ui import NoteTrainerScoreUI
+from note_trainer_missed_ui import NoteTrainerMissedNotesUI
 from sql_funcs import get_current_game_id, insert_trial, insert_final_score, get_best_score
 from PIL import Image, ImageTk
 import ttkbootstrap as tb
@@ -259,6 +260,8 @@ class NoteTrainerUI(tb.window.Toplevel):
         self.withdraw()        
     
     def show_worst_notes(self):
+        ntmnui = NoteTrainerMissedNotesUI(self)
+        self.withdraw()        
         pass
     
     def go_main_menu(self):
