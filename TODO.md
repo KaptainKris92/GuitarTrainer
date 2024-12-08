@@ -2,7 +2,6 @@
 ---------
 | TO-DO |
 --------
-- Add flats
 - Sight reading - Name the note
 - Sight reading - Play the note
 - Keys - Number of sharps/flats

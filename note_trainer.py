@@ -130,7 +130,7 @@ class NoteTrainer():
                 playsound('./sounds/incorrect.mp3')
                 incorrect_note = self.find_note(median_note)
                 # Replace ♯ and ♭with valid symbols, otherwise difficulty finding the note
-                incorrect_note_sound = incorrect_note.replace("♯","#").replace("♭","b")                        
+                incorrect_note_sound = incorrect_note.replace("♯","#").replace("♭","b").replace("/", "or")                    
                 
                 playsound('./sounds/you_played.mp3')
                 playsound(f'./sounds/{incorrect_note_sound}.mp3')                
