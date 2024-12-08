@@ -35,7 +35,7 @@ class NoteTrainerMissedNotesUI(tb.window.Toplevel):
                           text = "Top")
         label1.pack(side="left", pady=10)
         self.top_n = tb.Combobox(top_n_container,
-                                 values=list(range(0, 20)),
+                                 values=list(range(1, 21)),
                                  width = 2)
         self.top_n.current(10)
         self.top_n.bind('<<ComboboxSelected>>', self.plot_incorrect)

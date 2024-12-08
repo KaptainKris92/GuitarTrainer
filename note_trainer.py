@@ -102,11 +102,13 @@ class NoteTrainer():
     
     def play_game(self, time_per_guess=10, string=None, low_high=None, note=None):
         
-                        
+        # Replace ♯ and ♭with valid symbols, otherwise difficulty finding the note
+        note_sound = note.replace("♯","#").replace("♭","b")                              
+        
         print(f"Play {string} string, {low_high} {note}.")
         playsound(f'./sounds/{string}.mp3')
         playsound(f'./sounds/{low_high}.mp3')
-        playsound(f'./sounds/{note}.mp3')
+        playsound(f'./sounds/{note_sound}.mp3')
         sleep(0.1)
         playsound('./sounds/clack.mp3')
         played_notes = self.record(record_duration=time_per_guess)
@@ -127,8 +129,11 @@ class NoteTrainer():
             else:
                 playsound('./sounds/incorrect.mp3')
                 incorrect_note = self.find_note(median_note)
+                # Replace ♯ and ♭with valid symbols, otherwise difficulty finding the note
+                incorrect_note_sound = incorrect_note.replace("♯","#").replace("♭","b")                        
+                
                 playsound('./sounds/you_played.mp3')
-                playsound(f'./sounds/{incorrect_note}.mp3')                
+                playsound(f'./sounds/{incorrect_note_sound}.mp3')                
                 print(f"Incorrect. You played {incorrect_note}.")
                 return {'correct': False,
                         'string': string,
