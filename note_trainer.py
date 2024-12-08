@@ -10,10 +10,6 @@ import aubio  # Note recognition
 # For playing sound files. Has to be version 1.2.2 to work
 from playsound import playsound
 
-# Database
-#from sql_funcs import get_current_game_id, insert_trial, insert_final_score, get_best_score
-
-
 class NoteTrainer():
     def __init__(self, input_device):        
         self.input_device = input_device            
@@ -149,42 +145,3 @@ class NoteTrainer():
                     'note': note,
                     'played_note': None}          
         
-    
-
-
-
-    '''
-    #############
-    ### TO DO ###
-    #############
-    
-    - Make a UI
-    - Separate into files/modules
-        - Main     
-        - Games (contains game logic)
-        - Audio (contains recording and device stuff)
-            - Possibly turn into a class so uses the same pyaudio initialisation?
-        - Database (all SQL stuff)
-    - Fix 'The system cannot find the path specified.' error
-    - Re-record 1st to 5th without saying 'string'
-    - Clean up the functions using SQL so there is less repetition.
-    - If database doesn't exist in folder, write code to create one. 
-    - Write function for plotting how many times got each note incorrect (as a proportion/percentage of total times note was targeted?)
-    - Other statistics, e.g. total times played, average percentage correct, most correct notes.
-    
-    
-    ------------------
-    | Arpeggios game |
-    ------------------
-    
-    ------------------
-    | Intervals game |
-    ------------------
-    
-    ------------------
-    | Scales game ?? |
-    ------------------
-    
-    
-        
-    '''
