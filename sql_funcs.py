@@ -13,7 +13,7 @@ def create_database():
 
     cur.execute("CREATE TABLE score_log(Date TIMESTAMP, GameID INTEGER, TimePerGuess INTEGER, TotalTrials INTEGER, TrialNumber INTEGER, TargetString VARCHAR(3), TargetLowHigh VARCHAR(4), TargetNote VARCHAR(2), PlayedNote VARCHAR(2), IsCorrect BOOLEAN)")
 
-    cur.execute("CREATE TABLE final_score_log(Date TIMESTAMP, GameID INTEGER, TimerPerGuess INTEGER, TotalTrials INTEGER, TotalCorrect INTEGER)")
+    cur.execute("CREATE TABLE final_score_log(Date TIMESTAMP, GameID INTEGER, TimePerGuess INTEGER, TotalTrials INTEGER, TotalCorrect INTEGER)")
 
     cur.close()
     con.close()
@@ -87,7 +87,7 @@ def get_best_score(time_per_guess, trials, num_correct):
     cur = con.cursor()
 
     previous_best = cur.execute(f"SELECT MAX(TotalCorrect) FROM final_score_log\
-                WHERE TimerPerGuess = {time_per_guess} AND TotalTrials = {trials}").fetchall()[0][0]
+                WHERE TimePerGuess = {time_per_guess} AND TotalTrials = {trials}").fetchall()[0][0]
 
     if previous_best is None:
         return "New high score!"
@@ -156,7 +156,7 @@ def get_trial_time_combos():
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
 
-    trial_time_combos = cur.execute("SELECT DISTINCT TotalTrials AS DT, TimerPerGuess AS TPG\
+    trial_time_combos = cur.execute("SELECT DISTINCT TotalTrials AS DT, TimePerGuess AS TPG\
                                     FROM final_score_log\
                                         ORDER BY DT DESC, TPG ASC"
                                     ).fetchall()
@@ -168,7 +168,7 @@ def get_highscores(trials, time_per_guess):
     cur = con.cursor()
 
     highscores = cur.execute(f"SELECT * FROM final_score_log\
-                                    WHERE TimerPerGuess = {time_per_guess}\
+                                    WHERE TimePerGuess = {time_per_guess}\
                                         AND TotalTrials = {trials}\
                                             ORDER BY TotalCorrect DESC, GameID"
                                             ).fetchall()    
