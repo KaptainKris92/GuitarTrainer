@@ -2,3 +2,4 @@
 /__pycache__
 /backups
 score_database.db
+.venv/

@@ -8,7 +8,7 @@ from time import sleep
 import pyaudio  # Audio input
 import aubio  # Note recognition
 # For playing sound files. Has to be version 1.2.2 to work
-from playsound import playsound
+from playsound3 import playsound
 
 class NoteTrainer():
     def __init__(self, input_device):        
