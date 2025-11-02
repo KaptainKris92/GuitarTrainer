@@ -1,5 +1,5 @@
 /.spyproject
 /__pycache__
 /backups
-score_database.db
+score_database
 .venv/
