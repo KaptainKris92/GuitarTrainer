@@ -14,7 +14,7 @@ Once the above are installed, set up and activate a virtual environment and run 
 ## Using the app
 
 1. Run `py main.py` 
-2. Select the input device for your audio source from the drop down menu
+2. Select the input device for your audio source from the drop down menu and click 'Select device'. 
 ![Main Menu](screenshots/01-MainMenu.png)
 3. Note Trainer for note training.
     - Set the number of seconds per trial and the number of total trials you want to use. 
