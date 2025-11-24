@@ -19,7 +19,7 @@ Once the above are installed, set up and activate a virtual environment and run 
 3. Note Trainer for note training.
     - Set the number of seconds per trial and the number of total trials you want to use. 
     - You will be told (via text and my voice) to play a specific note on a specific string in a specific position. ![Note trainer - Main screen during ameplay](screenshots/02a-NoteTrainerMain1.png)
-    - After the number of seconds specified earlier, you will be see (and be told by my voice) if you played the correct or incorrect note. If incorrect, you will be told which note you played (audio of my voice and in console log). 
+    - After the number of seconds specified earlier, you will be see (and be told by my voice) if you played the correct or incorrect note. If incorrect, you will be told which note you played (audio of my voice and in console log).    
     ![Console log during game play](screenshots/05-ConsoleLog.png)
     - At the end of all trials, you will see how many you got incorrect. Your progress is also tracked by the white, green, and red indicators on the screen. ![End of game screen](screenshots/02b-NoteTrainerMain2.png)
 4. 'High scores' shows you your best games for each `Trials: X | Time per trial: Y` combination. ![High scores](screenshots/03-NoteTrainerHighScore.png)
