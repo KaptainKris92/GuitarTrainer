@@ -1,6 +1,6 @@
 from tkinter import Entry, Frame, Canvas, Label
 import ttkbootstrap as tb
-from main_menu import MainMenu
+from ui.main_menu import MainMenu
 
 if __name__ == "__main__":
     app = MainMenu()

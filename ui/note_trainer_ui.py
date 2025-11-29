@@ -7,6 +7,7 @@ import ttkbootstrap as tb
 
 class NoteTrainerUI(tb.window.Toplevel):
     def __init__(self, input_device, main_menu):
+        # UI window config
         super(NoteTrainerUI, self).__init__(title = "Guitar Trainer: Notes")        
         self.main_menu = main_menu
         self.input_device = input_device
@@ -27,6 +28,7 @@ class NoteTrainerUI(tb.window.Toplevel):
                                   font = ("Helvetica", 28))
         ntp_title.pack(pady=5)
         
+        # Time per guess input
         time_per_guess_label = tb.Label(self, 
                                              text="Select time per guess (seconds)", 
                                              font=("Helvetica", 18))
@@ -36,6 +38,7 @@ class NoteTrainerUI(tb.window.Toplevel):
         self.time_per_guess_input.pack(pady=5)
         self.time_per_guess_input.insert(0, "1")
 
+        # Number of trials input
         trials_label = tb.Label(
             self, text="Select number of trials", font=("Helvetica", 18))
         trials_label.pack(pady=5)  # Specify padding
@@ -44,12 +47,14 @@ class NoteTrainerUI(tb.window.Toplevel):
         self.trials_input.pack(pady=5)
         self.trials_input.insert(0, "10")
 
+        # Play button
         play_btn = tb.Button(self,
                              text="Play",
                              command=self.play_button_action,
                              style="success.TButton")
         play_btn.pack(pady=5)
         
+        # Target note text
         string_frame = tb.Frame(self)
         string_frame.pack(anchor = 'center', pady=5, padx=10)
         
@@ -68,14 +73,11 @@ class NoteTrainerUI(tb.window.Toplevel):
                                    font = ("Arial", 30))
         self.note_label.pack(side = 'left', padx=5)
         
-        
-        
-        
-
+        # Correct/incorrect circles
         self.circle_frame = tb.Frame(self)
         self.circle_frame.pack(anchor='center', pady=5)
                 
-        
+        # Stats buttons
         high_scores_btn = tb.Button(self,
                                     text = "High scores",
                                     command=self.show_highscores,
@@ -88,6 +90,7 @@ class NoteTrainerUI(tb.window.Toplevel):
                                     style = "secondary.TButton")
         worst_notes_btn.pack(pady=5)
         
+        # Main menu button
         mm_btn = tb.Button(self,
                            text = "Main menu",
                            command = self.go_main_menu,

@@ -51,6 +51,7 @@ class MainMenu(tb.window.Window):
         # Set default device
         self.device_combo.current(2)
 
+        # 'Tuner' button
         self.tuner_btn = tb.Button(self,
                                    text="Tuner",
                                    command=self.launch_tuner,

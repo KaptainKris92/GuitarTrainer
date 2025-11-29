@@ -2,6 +2,7 @@ import ttkbootstrap as tb
 
 class TunerUI(tb.window.Toplevel):
     def __init__(self, input_device, main_menu):
+        # UI window config
         super(TunerUI, self).__init__(title = "Guitar Tuner")        
         self.main_menu = main_menu
         self.input_device = input_device
@@ -21,6 +22,14 @@ class TunerUI(tb.window.Toplevel):
                                   text = "Tuner",
                                   font = ("Helvetica", 28))
         ntp_title.pack(pady=5)
+        
+        # Main menu button
+        mm_btn = tb.Button(self,
+                           text = "Main menu",
+                           command = self.go_main_menu,
+                           style="primary.TButton"
+                           )
+        mm_btn.pack(pady=5)
         
     
     def go_main_menu(self):
