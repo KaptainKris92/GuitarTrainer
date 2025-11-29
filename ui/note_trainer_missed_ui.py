@@ -1,5 +1,5 @@
 import ttkbootstrap as tb
-from sql_funcs import create_incorrect_bar_chart
+from functions.sql_funcs import create_incorrect_bar_chart
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class NoteTrainerMissedNotesUI(tb.window.Toplevel):
@@ -19,9 +19,7 @@ class NoteTrainerMissedNotesUI(tb.window.Toplevel):
         x = (screen_width / 2) - (app_width / 2)
         y = (screen_height / 2) - (app_height / 2)
 
-        self.geometry(f"{app_width}x{app_height}+{int(x)}+{int(y)}")
-
-        
+        self.geometry(f"{app_width}x{app_height}+{int(x)}+{int(y)}")        
         
         page_title = tb.Label(self,
                               text="Note Trainer - Top 10 missed notes",

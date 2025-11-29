@@ -1,7 +1,7 @@
-from note_trainer import NoteTrainer
-from note_trainer_score_ui import NoteTrainerScoreUI
-from note_trainer_missed_ui import NoteTrainerMissedNotesUI
-from sql_funcs import get_current_game_id, insert_trial, insert_final_score, get_best_score
+from functions.note_trainer import NoteTrainer
+from ui.note_trainer_score_ui import NoteTrainerScoreUI
+from ui.note_trainer_missed_ui import NoteTrainerMissedNotesUI
+from functions.sql_funcs import get_current_game_id, insert_trial, insert_final_score, get_best_score
 from PIL import Image, ImageTk
 import ttkbootstrap as tb
 

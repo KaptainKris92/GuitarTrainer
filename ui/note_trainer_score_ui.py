@@ -1,8 +1,6 @@
 import ttkbootstrap as tb
 from ttkbootstrap.tableview import Tableview
-from sql_funcs import get_trial_time_combos, get_highscores
-import datetime
-
+from functions.sql_funcs import get_trial_time_combos, get_highscores
 
 class NoteTrainerScoreUI(tb.window.Toplevel):
     def __init__(self, note_trainer_ui):

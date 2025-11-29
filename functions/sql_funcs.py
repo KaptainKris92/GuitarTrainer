@@ -5,9 +5,11 @@ import os.path
 #import numpy as np
 import matplotlib.pyplot as plt
 
+DATABASE_PATH = "databases/score_database.db"
+
 def create_database():
     # Probably a more efficient way of using the connection/cursor
-    con = sqlite3.connect("score_database.db",
+    con = sqlite3.connect(DATABASE_PATH,
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
 
@@ -24,7 +26,7 @@ def create_database():
 
 
 def get_current_game_id():
-    con = sqlite3.connect("score_database.db",
+    con = sqlite3.connect(DATABASE_PATH,
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
 
@@ -40,7 +42,7 @@ def insert_trial(game_id, time_per_guess, trials, trial_number, target_string, t
 
     insertQuery = "INSERT INTO score_log VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
 
-    con = sqlite3.connect("score_database.db",
+    con = sqlite3.connect(DATABASE_PATH,
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
 
@@ -64,7 +66,7 @@ def insert_trial(game_id, time_per_guess, trials, trial_number, target_string, t
 def insert_final_score(game_id, time_per_guess, trials, num_correct):
     insertQuery = "INSERT INTO final_score_log VALUES (?, ?, ?, ?, ?);"
 
-    con = sqlite3.connect("score_database.db",
+    con = sqlite3.connect(DATABASE_PATH,
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
 
@@ -81,7 +83,7 @@ def insert_final_score(game_id, time_per_guess, trials, num_correct):
 
 
 def get_best_score(time_per_guess, trials, num_correct):
-    con = sqlite3.connect("score_database.db",
+    con = sqlite3.connect(DATABASE_PATH,
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
 
     cur = con.cursor()
@@ -100,7 +102,7 @@ def get_best_score(time_per_guess, trials, num_correct):
 
 
 def get_top_incorrect(top_n = None):
-    con = sqlite3.connect("score_database.db",
+    con = sqlite3.connect(DATABASE_PATH,
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
     
@@ -152,7 +154,7 @@ def create_incorrect_bar_chart(top_n = None):
       
 
 def get_trial_time_combos():
-    con = sqlite3.connect("score_database.db",
+    con = sqlite3.connect(DATABASE_PATH,
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
 
@@ -163,7 +165,7 @@ def get_trial_time_combos():
     return trial_time_combos
 
 def get_highscores(trials, time_per_guess):
-    con = sqlite3.connect("score_database.db",
+    con = sqlite3.connect(DATABASE_PATH,
                           detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
     cur = con.cursor()
 
@@ -177,5 +179,5 @@ def get_highscores(trials, time_per_guess):
 
 
 
-if not os.path.isfile("score_database.db"):
+if not os.path.isfile(DATABASE_PATH):
     create_database()
