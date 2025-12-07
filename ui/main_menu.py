@@ -24,7 +24,7 @@ class MainMenu(tb.window.Window):
 
         mm_title = tb.Label(self,
                             text="Guitar Trainer",
-                            font=("Helvetica", 28)).pack(pady=10)    
+                            font=("Helvetica", 28)).pack(pady=10)
 
         # Select input device
         self.dl = DeviceLister()
@@ -45,7 +45,7 @@ class MainMenu(tb.window.Window):
                                            text="Select device",
                                            command=self.device_confirmation,
                                            style="success.TButton")
-        
+
         self.select_device_btn.pack(pady=5)
 
         # Set default device
@@ -56,7 +56,7 @@ class MainMenu(tb.window.Window):
                                    text="Tuner",
                                    command=self.launch_tuner,
                                    style="primary.Tbutton")
-        
+
         self.tuner_btn.pack(pady=5)
 
         # 'Note trainer' button
@@ -82,10 +82,10 @@ class MainMenu(tb.window.Window):
         tuner = TunerUI(self.input_devices.index(
             self.device_combo.get()), self)
         self.withdraw()
-        
+
     def launch_note_trainer(self):
-        ntp = NoteTrainerUI(self.input_devices.index(
-            self.device_combo.get()), self)
+        ntp = NoteTrainerUI(input_device=self.input_devices.index(
+            self.device_combo.get()), main_menu=self)
         self.withdraw()
 
     def exit_app(self):

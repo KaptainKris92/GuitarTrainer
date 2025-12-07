@@ -215,7 +215,6 @@ class NoteTrainerUI(tb.window.Toplevel):
             )[self.trial_number].configure(image=gc)
             pass
 
-        print("Correct!")
         self.trial_number += 1
         
         self.update()
@@ -239,7 +238,6 @@ class NoteTrainerUI(tb.window.Toplevel):
             self.circle_frame.winfo_children(
             )[self.trial_number].configure(image=rc)
 
-        print("Incorrect :(")
         self.trial_number += 1
         
         self.update()
