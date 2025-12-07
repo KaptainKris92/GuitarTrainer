@@ -54,10 +54,10 @@ class TunerUI(tb.window.Toplevel):
         self.audio_analyser.start()
         
         # For debugging
-        # while True:
-        #     self.frequency_queue_data = self.frequency_queue.get()
-        #     if self.frequency_queue_data is not None:
-        #         print ("Loudest frequency:", self.frequency_queue_data, "\nNearest note:", self.audio_analyser.frequency_to_note_name(self.frequency_queue_data, 440))
+        while True:
+            self.frequency_queue_data = self.frequency_queue.get()
+            if self.frequency_queue_data is not None:
+                print ("Loudest frequency:", self.frequency_queue_data, "\nNearest note:", self.audio_analyser.frequency_to_note_name(self.frequency_queue_data, 440))
         
         
     
