@@ -34,4 +34,4 @@ class Settings:
     NEEDLE_BUFFER_LENGTH = 30
     HITS_TILL_NOTE_NUMBER_UPDATE = 15
     
-    GUI_UPDATE_INTERVAL_MS = 40 # Used for how often to read frequency queue and update GUI
+    GUI_UPDATE_INTERVAL_MS = 10 # Used for how often to read frequency queue and update GUI
