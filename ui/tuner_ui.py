@@ -42,9 +42,12 @@ class TunerUI(tb.window.Toplevel):
         self.font_manager = FontManager()
         # self.main_path = os.path.dirname(os.path.abspath(__file__))
         self.main_path = os.path.dirname(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
-        self.image_manager = ImageManager(self.main_path)
+        self.image_manager = ImageManager(self.main_path)        
         
-        self.tuner_frame = MainFrame(self)
+
+        # Main tuner UI
+        self.main_frame = MainFrame(self)
+        self.main_frame.pack(fill="both", expand = True, padx=10, pady=(0,5))
         
         # Main menu button
         mm_btn = tb.Button(self,
@@ -53,8 +56,6 @@ class TunerUI(tb.window.Toplevel):
                            style="primary.TButton"
                            )
         mm_btn.pack(pady=5)
-        
-        self.main_frame = MainFrame(self)
 
         # Start the audio analyser 
         self.frequency_queue = ProtectedList()        
@@ -66,8 +67,6 @@ class TunerUI(tb.window.Toplevel):
         self.note_number_counter = 0
         self.nearest_note_number_buffered = 69
         self.a4_frequency = 440        
-        
-        self.draw_main_frame()
         
         self.timer = Timer(Settings.FPS)
             
@@ -82,9 +81,6 @@ class TunerUI(tb.window.Toplevel):
         self.audio_analyser.join()
         self.withdraw()
         
-    def draw_main_frame(self, event=0):
-        self.tuner_frame.place(relx=0, rely=0, relheight=1, relwidth=1)
-        
     def on_closing(self, event=0):
         self.audio_analyser.running = False
         # Ensures thread has fully stopped
@@ -93,14 +89,14 @@ class TunerUI(tb.window.Toplevel):
         
     def poll_frequency_queue(self):
         '''Periodically checks the frequency queue without blocking the UI. This is also responsible for updating the UI'''
-        freq = self.frequency_queue.get()
-        
+            
         # DEBUGGING
-        if freq is not None:
-            print(
-                "Loudest frequency:", freq,
-                "\nNearest note:", self.audio_analyser.frequency_to_note_name(freq, 440)
-            )
+        # freq = self.frequency_queue.get()
+        # if freq is not None:
+        #     print(
+        #         "Loudest frequency:", freq,
+        #         "\nNearest note:", self.audio_analyser.frequency_to_note_name(freq, 440)
+        #     )
         # Method runs again every 50ms
         # self.after(50, self.poll_frequency_queue)
                         
