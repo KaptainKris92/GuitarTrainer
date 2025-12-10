@@ -7,7 +7,7 @@ import sys
 class AudioAnalyser(Thread):
     """ This AudioAnalyzer reads the microphone and finds the frequency of the loudest tone.
         To use it, you also need the ProtectedList class from the file threading_helper.py.
-        You need to created an instance of the ProtectedList, which acts as a queue, and you
+        You need to create an instance of the ProtectedList, which acts as a queue, and you
         have to pass this queue to the AudioAnalyzer. Then you can read the values from the queue:
 
         queue = ProtectedList()
@@ -20,8 +20,8 @@ class AudioAnalyser(Thread):
             time.sleep(0.02) """
 
     # settings: (are tuned for best detecting string instruments like guitar)
-    SAMPLING_RATE = 48000  # mac hardware: 44100, 48000, 96000
-    CHUNK_SIZE = 1024  # number of samples
+    SAMPLING_RATE = 44100  # mac hardware: 44100, 48000, 96000. # Changed to 44100 to match note_trainer.py
+    CHUNK_SIZE = 1024  # number of samples 
     BUFFER_TIMES = 50  # buffer length = CHUNK_SIZE * BUFFER_TIMES
     ZERO_PADDING = 3  # times the buffer length
     NUM_HPS = 3  # Harmonic Product Spectrum
@@ -46,7 +46,7 @@ class AudioAnalyser(Thread):
         self.device_index = device_index
         
         # Hardcode device here for now
-        self.device_index = 3
+        self.device_index = device_index
 
         try:
             self.audio_object = PyAudio()
@@ -153,7 +153,7 @@ class AudioAnalyser(Thread):
 
 if __name__ == "__main__":
     # Only for testing:
-    from tuner_functions.threading_helper import ProtectedList
+    from tuner_utils.threading_helper import ProtectedList
     import time
 
     q = ProtectedList()

@@ -2,7 +2,7 @@ from threading import Lock
 
 
 class ProtectedList(object):
-    """ Simple queue to share data between Threads with lock protection.
+    """ Simple FIFO queue to share data between Threads with lock protection.
         Standard buffer length is only 8! """
 
     def __init__(self, buffer_size=8):
@@ -11,6 +11,8 @@ class ProtectedList(object):
         self.lock = Lock()
 
     def put(self, element):
+        
+        # Lock structure so no other thread can read or write simultaneously.
         self.lock.acquire()
 
         # append new element at the end of the list
@@ -20,12 +22,13 @@ class ProtectedList(object):
         if len(self.elements) > self.buffer_size:
             self.elements.pop(0)
 
+        # Release the lock.
         self.lock.release()
 
     def get(self):
         self.lock.acquire()
 
-        # check if something is in the list
+        # check if something is in the list. If so, returns oldest element and deletes from start of list.
         if len(self.elements) > 0:
             element = self.elements[0]
             del self.elements[0]

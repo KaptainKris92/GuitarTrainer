@@ -1,9 +1,9 @@
 import tkinter
 from math import sin, radians
 
-from tuner_functions.tkinter_custom_button_imageset import TkinterCustomButtonImageset
-from tuner_functions.tkinter_custom_button import TkinterCustomButton
-from tuner_functions.settings import Settings
+from tuner_utils.tkinter_custom_button_imageset import TkinterCustomButtonImageset
+from tuner_utils.tkinter_custom_button import TkinterCustomButton
+from tuner_utils.settings import Settings
 
 
 class MainFrame(tkinter.Frame):
@@ -111,28 +111,15 @@ class MainFrame(tkinter.Frame):
                                                     command=None)
         self.button_frequency.place(anchor=tkinter.SW, relx=0.05, rely=0.9)
 
-        # self.button_info = TkinterCustomButton(master=self.botton_frame,
-        #                                        bg_color=self.color_manager.background_layer_0,
-        #                                        fg_color=self.color_manager.theme_main,
-        #                                        hover_color=self.color_manager.theme_light,
-        #                                        text_font=self.font_manager.button_font,
-        #                                        text="Info",
-        #                                        text_color=self.color_manager.text_main,
-        #                                        corner_radius=10,
-        #                                        width=110,
-        #                                        height=40,
-        #                                        command=self.master.draw_settings_frame)
-        # self.button_info.place(anchor=tkinter.SE, relx=0.95, rely=0.9)
-
-        self.button_mute = TkinterCustomButtonImageset(master=self,
-                                                       bg_color=self.color_manager.background_layer_1,
-                                                       image_dict={"standard": self.image_manager.bell_image,
-                                                                   "clicked": self.image_manager.bell_muted_image,
-                                                                   "standard_hover": self.image_manager.bell_hovered_image,
-                                                                   "clicked_hover": self.image_manager.bell_muted_hovered_image},
-                                                       height=self.image_manager.bell_image.height(),
-                                                       width=self.image_manager.bell_image.width())
-        self.button_mute.place(anchor=tkinter.NE, relx=0.95, rely=0.05)
+        # self.button_mute = TkinterCustomButtonImageset(master=self,
+        #                                                bg_color=self.color_manager.background_layer_1,
+        #                                                image_dict={"standard": self.image_manager.bell_image,
+        #                                                            "clicked": self.image_manager.bell_muted_image,
+        #                                                            "standard_hover": self.image_manager.bell_hovered_image,
+        #                                                            "clicked_hover": self.image_manager.bell_muted_hovered_image},
+        #                                                height=self.image_manager.bell_image.height(),
+        #                                                width=self.image_manager.bell_image.width())
+        # self.button_mute.place(anchor=tkinter.NE, relx=0.95, rely=0.05)
 
     def update_color(self):
         self.configure(bg=self.color_manager.background_layer_1)
