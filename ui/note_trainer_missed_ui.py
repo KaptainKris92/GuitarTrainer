@@ -35,7 +35,7 @@ class NoteTrainerMissedNotesUI(tb.window.Toplevel):
         self.top_n = tb.Combobox(top_n_container,
                                  values=list(range(1, 21)),
                                  width = 2)
-        self.top_n.current(10)
+        self.top_n.current(9)
         self.top_n.bind('<<ComboboxSelected>>', self.plot_incorrect)
         self.top_n.pack(side="left",pady=10)
         label2 = tb.Label(top_n_container, 
@@ -59,8 +59,9 @@ class NoteTrainerMissedNotesUI(tb.window.Toplevel):
         self.plot_canvas.get_tk_widget().pack_forget() 
         self.fig = create_incorrect_bar_chart(self.top_n.get())                
         self.plot_canvas = FigureCanvasTkAgg(self.fig, master = self)        
-        self.plot_canvas.get_tk_widget().pack(side="top", fill = None, expand = False)               
-        self.update()
+        self.plot_canvas.get_tk_widget().pack(side="top", fill = None, expand = False)
+        self.plot_canvas.draw()
+        self.update_idletasks()
         
         
     def back_btn_action(self):

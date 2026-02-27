@@ -3,3 +3,6 @@
 /backups
 score_database
 .venv/
+Z_Codex_Diffs/
+**/__pycache__/
+*.py[cod]

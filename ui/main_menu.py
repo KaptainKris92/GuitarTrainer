@@ -29,7 +29,7 @@ class MainMenu(tb.window.Window):
         # Select input device
         self.dl = DeviceLister()
         self.input_devices = self.dl.show_devices("input")
-        max_string = len(max(self.input_devices, key=len))
+        max_string = len(max(self.input_devices, key=len)) if self.input_devices else 30
 
         self.device_label = tb.Label(
             self, text="Select input device", font=("Helvetica", 18)
@@ -48,14 +48,18 @@ class MainMenu(tb.window.Window):
 
         self.select_device_btn.pack(pady=5)
 
-        # Set default device
-        self.device_combo.current(2)
+        # Set default device if any are available
+        if self.input_devices:
+            self.device_combo.current(0)
+        else:
+            self.device_label.config(text="No input device found")
+            self.select_device_btn.configure(state="disabled")
 
         # 'Tuner' button
         self.tuner_btn = tb.Button(self,
                                    text="Tuner",
                                    command=self.launch_tuner,
-                                   style="primary.Tbutton")
+                                   style="primary.TButton")
 
         self.tuner_btn.pack(pady=5)
 
@@ -65,6 +69,9 @@ class MainMenu(tb.window.Window):
                                  command=self.launch_note_trainer,
                                  style="primary.TButton")
         self.ntp_btn.pack(pady=5)
+        if not self.input_devices:
+            self.tuner_btn.configure(state="disabled")
+            self.ntp_btn.configure(state="disabled")
 
         # 'Quit' button
         self.exit_btn = tb.Button(self,
@@ -75,19 +82,26 @@ class MainMenu(tb.window.Window):
         self.exit_btn.pack(pady=5)
 
     def device_confirmation(self):
-        device_id = self.input_devices.index(self.device_combo.get())
-        self.device_label.config(text=f"Device {device_id} selected")
+        try:
+            device_id = self._selected_input_device_id()
+            self.device_label.config(text=f"Input device {device_id} selected")
+        except ValueError:
+            self.device_label.config(text="Please select a valid input device")
 
     def launch_tuner(self):
-        tuner = TunerUI(self.input_devices.index(
-            self.device_combo.get()), self)
+        tuner = TunerUI(self._selected_input_device_id(), self)
         self.withdraw()
 
     def launch_note_trainer(self):
-        ntp = NoteTrainerUI(input_device=self.input_devices.index(
-            self.device_combo.get()), main_menu=self)
+        ntp = NoteTrainerUI(input_device=self._selected_input_device_id(), main_menu=self)
         self.withdraw()
 
     def exit_app(self):
         self.destroy()
         self.quit()
+
+    def _selected_input_device_id(self):
+        selected = self.device_combo.get().strip()
+        if not selected.startswith("Input Device "):
+            raise ValueError("No valid device selected")
+        return int(selected.split(" - ", 1)[0].replace("Input Device ", ""))
