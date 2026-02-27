@@ -138,7 +138,8 @@ class MainFrame(tkinter.Frame):
         self.upper_canvas.itemconfig(self.lower_note_text, fill=self.color_manager.text_2)
         self.upper_canvas.itemconfig(self.frequency_text, fill=self.color_manager.text_2)
 
-        self.button_mute.label.configure(bg=self.color_manager.background_layer_1)
+        if hasattr(self, "button_mute"):
+            self.button_mute.label.configure(bg=self.color_manager.background_layer_1)
 
         self.botton_frame.configure(bg=self.color_manager.background_layer_0)
 
@@ -147,10 +148,11 @@ class MainFrame(tkinter.Frame):
                                               hover_color=self.color_manager.theme_light,
                                               text_color=self.color_manager.text_main)
 
-        self.button_info.configure_color(bg_color=self.color_manager.background_layer_0,
-                                         fg_color=self.color_manager.theme_main,
-                                         hover_color=self.color_manager.theme_light,
-                                         text_color=self.color_manager.text_main)
+        if hasattr(self, "button_info"):
+            self.button_info.configure_color(bg_color=self.color_manager.background_layer_0,
+                                             fg_color=self.color_manager.theme_main,
+                                             hover_color=self.color_manager.theme_light,
+                                             text_color=self.color_manager.text_main)
 
     def set_needle_color(self, color):
         if color == "green":

@@ -29,13 +29,15 @@ class NoteTrainerScoreUI(tb.window.Toplevel):
         combo_list = []        
         for i in self.past_combos:
             combo_list.append(f"Trials: {i[0]} | Time per trial: {i[1]}")        
-        max_string = len(max(combo_list, key=len))
+        max_string = len(max(combo_list, key=len)) if combo_list else 40
         
         self.combo_select = tb.Combobox(self,
                                         values=combo_list,
                                         width=max_string)
         self.combo_select.bind('<<ComboboxSelected>>', self.combo_selected)
         self.combo_select.pack(pady=10)
+        if not combo_list:
+            self.combo_select.configure(state="disabled")
 
         self.table_columns = [
             {"text": "Date", "stretch": False},
@@ -56,6 +58,13 @@ class NoteTrainerScoreUI(tb.window.Toplevel):
             searchable=False)
         
         self.highscore_table.pack(pady=10)
+        if not combo_list:
+            info_label = tb.Label(
+                self,
+                text="No highscores yet. Play a game to populate this table.",
+                font=("Helvetica", 12),
+            )
+            info_label.pack(pady=5)
         
         back_btn = tb.Button(self,
                              text="Back",

@@ -73,6 +73,7 @@ class TunerUI(tb.window.Toplevel):
         # For debugging:
         # Periodic polling of queue (prevents while loop from blocking thread)
         self.poll_frequency_queue()
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
                     
     def go_main_menu(self):
         self.main_menu.deiconify()
