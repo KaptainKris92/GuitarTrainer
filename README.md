@@ -28,3 +28,7 @@ Once the above are installed, set up and activate a virtual environment and run 
 ![High scores](screenshots/03-NoteTrainerHighScore.png)
 5. 'Most incorrect notes' shows you a bar chart of your most commonly missed notes.    
 ![Most missed notes](screenshots/04-NoteTrainerMissedNotes.png)
+
+## Attribution
+
+Guitar tuner is based off [this project ](https://github.com/TomSchimansky/GuitarTuner) by [Tom Schimansky](https://github.com/TomSchimansky).
