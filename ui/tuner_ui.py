@@ -1,5 +1,6 @@
 import sys
 import os
+import tkinter as tk
 import ttkbootstrap as tb
 import numpy as np
 
@@ -69,13 +70,17 @@ class TunerUI(tb.window.Toplevel):
         self.a4_frequency = 440        
         
         self.timer = Timer(Settings.FPS)
+        self.poll_job_id = None
+        self._is_closing = False
             
         # For debugging:
         # Periodic polling of queue (prevents while loop from blocking thread)
         self.poll_frequency_queue()
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.bind("<Destroy>", self._on_destroy, add="+")
                     
     def go_main_menu(self):
+        self._cancel_poll_job()
         self.main_menu.deiconify()
         self.audio_analyser.running = False
         # Ensures thread has fully stopped
@@ -83,6 +88,8 @@ class TunerUI(tb.window.Toplevel):
         self.withdraw()
         
     def on_closing(self, event=0):
+        self._is_closing = True
+        self._cancel_poll_job()
         self.audio_analyser.running = False
         # Ensures thread has fully stopped
         self.audio_analyser.join()
@@ -90,6 +97,8 @@ class TunerUI(tb.window.Toplevel):
         
     def poll_frequency_queue(self):
         '''Periodically checks the frequency queue without blocking the UI. This is also responsible for updating the UI'''
+        if self._is_closing:
+            return
             
         # DEBUGGING
         # freq = self.frequency_queue.get()
@@ -168,4 +177,21 @@ class TunerUI(tb.window.Toplevel):
             sys.stderr.write('Error: Line {} {} {}\n'.format(sys.exc_info()[-1].tb_lineno, type(err).__name__, err))
             
         # Next poll in X milliseconds
-        self.after(Settings.GUI_UPDATE_INTERVAL_MS, self.poll_frequency_queue)
+        try:
+            self.poll_job_id = self.after(Settings.GUI_UPDATE_INTERVAL_MS, self.poll_frequency_queue)
+        except tk.TclError:
+            self.poll_job_id = None
+
+    def _cancel_poll_job(self):
+        if self.poll_job_id is None:
+            return
+        try:
+            self.after_cancel(self.poll_job_id)
+        except tk.TclError:
+            pass
+        self.poll_job_id = None
+
+    def _on_destroy(self, event):
+        if event.widget is self:
+            self._is_closing = True
+            self._cancel_poll_job()

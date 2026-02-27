@@ -5,6 +5,7 @@ from functions.sql_funcs import get_current_game_id, insert_final_score, insert_
 from PIL import Image, ImageTk
 import ttkbootstrap as tb
 import datetime
+import tkinter as tk
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Event, Thread
@@ -122,7 +123,10 @@ class NoteTrainerUI(tb.window.Toplevel):
         self.game_worker = None
         self.ui_event_queue = Queue()
         self.cancel_event = Event()
-        self.after(50, self._poll_game_events)
+        self._is_closing = False
+        self.poll_job_id = self.after(50, self._poll_game_events)
+        self.protocol("WM_DELETE_WINDOW", self._on_window_close)
+        self.bind("<Destroy>", self._on_destroy, add="+")
         
     def play_button_action(self):
         # Validate config and start a background gameplay worker.
@@ -233,6 +237,9 @@ class NoteTrainerUI(tb.window.Toplevel):
 
     def _poll_game_events(self):
         # Apply worker events on the tkinter thread.
+        if self._is_closing:
+            return
+
         try:
             while True:
                 event = self.ui_event_queue.get_nowait()
@@ -272,7 +279,10 @@ class NoteTrainerUI(tb.window.Toplevel):
                     self._set_game_controls_enabled(True)
         except Empty:
             pass
-        self.after(50, self._poll_game_events)
+        try:
+            self.poll_job_id = self.after(50, self._poll_game_events)
+        except tk.TclError:
+            self.poll_job_id = None
 
     def display_circles(self, circle_num=10):
         # Rebuild per-trial progress indicators for the current session.
@@ -378,6 +388,27 @@ class NoteTrainerUI(tb.window.Toplevel):
         self.cancel_event.set()
         self.cancel_btn.configure(state="disabled")
         self.status_label.config(text="Cancelling after current trial...")
+
+    def _on_window_close(self):
+        self._is_closing = True
+        self.cancel_event.set()
+        self._cancel_poll_job()
+        self.destroy()
+
+    def _cancel_poll_job(self):
+        if self.poll_job_id is None:
+            return
+        try:
+            self.after_cancel(self.poll_job_id)
+        except tk.TclError:
+            pass
+        self.poll_job_id = None
+
+    def _on_destroy(self, event):
+        if event.widget is self:
+            self._is_closing = True
+            self.cancel_event.set()
+            self._cancel_poll_job()
         
         
 
