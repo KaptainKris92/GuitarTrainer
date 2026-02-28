@@ -1,8 +1,16 @@
 /.spyproject
-/__pycache__
 /backups
 score_database
 .venv/
-Z_Codex_Diffs/
+
+# Python caches and compiled artefacts
+__pycache__/
 **/__pycache__/
 *.py[cod]
+*$py.class
+
+# Local Codex diff workspace
+Z_Codex_Diffs/
+
+# Local databases
+databases/
