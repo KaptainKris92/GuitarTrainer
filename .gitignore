@@ -5,6 +5,7 @@ score_database
 
 # Python caches and compiled artefacts
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 
