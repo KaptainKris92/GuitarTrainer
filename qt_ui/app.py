@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -630,41 +631,59 @@ class NoteTrainerWindow(QMainWindow):
 
 class FretboardGrid(QFrame):
     """Render a 6x12 fretboard grid showing either notes or scale degrees."""
-    def __init__(self, scale_notes, degree_by_note, display_mode: str):
+    def __init__(self, scale_notes, degree_by_note, display_mode: str, fret_count: int):
         """Capture scale data and render the requested fretboard mode."""
         super().__init__()
         self.scale_notes = set(scale_notes)
         self.degree_by_note = degree_by_note
         self.display_mode = display_mode  # "note" or "degree"
+        self.fret_count = fret_count
+        self._top_fret_labels = []
+        self._bottom_fret_labels = []
+        self._open_markers = []
+        self._note_markers = []
+        self._fret_cells = []
         self._build_ui()
 
     def _build_ui(self):
         """Build fretboard cells, open-string labels, and highlighted markers."""
         self.setObjectName("fretboardCard")
         layout = QGridLayout(self)
+        self.grid_layout = layout
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setHorizontalSpacing(0)
         layout.setVerticalSpacing(0)
 
         title = QLabel("Note Positions" if self.display_mode == "note" else "Scale Degrees")
         title.setObjectName("fretboardTitle")
-        layout.addWidget(title, 0, 0, 1, 14)
+        self._grid_title = title
+        layout.addWidget(title, 0, 0, 1, self.fret_count + 1)
 
-        # Fret numbers row (1..12), with left-most column reserved for open strings.
-        for fret in range(1, 13):
+        # Fret numbers row (1..N), with left-most column reserved for open strings.
+        for fret in range(1, self.fret_count + 1):
             fret_label = QLabel(str(fret))
             fret_label.setObjectName("fretNum")
             fret_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(fret_label, 1, fret, 1, 1)
+            self._top_fret_labels.append(fret_label)
 
         for row, open_note in enumerate(FRETBOARD_STRING_NOTES, start=2):
             # Open-string marker at fret 0.
-            open_marker = QLabel(open_note)
-            open_marker.setObjectName("openString")
+            if open_note in self.scale_notes:
+                open_text = open_note if self.display_mode == "note" else self.degree_by_note[open_note]
+            else:
+                open_text = open_note
+
+            open_marker = QLabel(open_text)
+            if open_note in self.scale_notes:
+                open_marker.setObjectName("fretMarkerRoot" if self.degree_by_note.get(open_note) == "1" else "fretMarker")
+            else:
+                open_marker.setObjectName("openString")
             open_marker.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(open_marker, row, 0, 1, 1)
+            self._open_markers.append(open_marker)
 
-            for fret in range(1, 13):
+            for fret in range(1, self.fret_count + 1):
                 note = note_at_fret(open_note, fret)
 
                 cell = QFrame()
@@ -672,6 +691,7 @@ class FretboardGrid(QFrame):
                 cell_layout = QVBoxLayout(cell)
                 cell_layout.setContentsMargins(0, 0, 0, 0)
                 cell_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self._fret_cells.append(cell)
 
                 if note in self.scale_notes:
                     text = note if self.display_mode == "note" else self.degree_by_note[note]
@@ -679,26 +699,96 @@ class FretboardGrid(QFrame):
                     marker.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     marker.setObjectName("fretMarkerRoot" if self.degree_by_note[note] == "1" else "fretMarker")
                     cell_layout.addWidget(marker)
+                    self._note_markers.append(marker)
 
                 layout.addWidget(cell, row, fret, 1, 1)
+
+        # Duplicate fret numbers at the bottom for easier reading.
+        bottom_row = len(FRETBOARD_STRING_NOTES) + 2
+        for fret in range(1, self.fret_count + 1):
+            fret_label = QLabel(str(fret))
+            fret_label.setObjectName("fretNumBottom")
+            fret_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(fret_label, bottom_row, fret, 1, 1)
+            self._bottom_fret_labels.append(fret_label)
+
+        self._apply_responsive_sizes()
+
+    def resizeEvent(self, event):
+        """Resize fretboard cells/markers to fit current window dimensions."""
+        self._apply_responsive_sizes()
+        super().resizeEvent(event)
+
+    def _apply_responsive_sizes(self):
+        cols = self.fret_count + 1
+        available_width = max(280, self.width() - 40)
+        cell_w = max(14, min(56, int(available_width / cols)))
+        cell_h = max(18, int(cell_w * 0.88))
+        marker_size = max(8, min(cell_h - 4, cell_w - 4))
+
+        # Shrink fonts with width, but do not scale above baseline.
+        reference_width = 1160 if self.fret_count == 24 else 680
+        shrink_scale = min(1.0, available_width / reference_width)
+        marker_font = max(8, int(16 * shrink_scale))
+        fret_font = max(8, int(14 * shrink_scale))
+        title_font = max(14, int(28 * shrink_scale))
+
+        for lbl in self._top_fret_labels:
+            lbl.setFixedSize(cell_w, max(9, int(cell_h * 0.62)))
+            lbl.setFont(QFont("Segoe UI", fret_font, QFont.Weight.Medium))
+        for lbl in self._bottom_fret_labels:
+            lbl.setFixedSize(cell_w, max(9, int(cell_h * 0.62)))
+            lbl.setFont(QFont("Segoe UI", fret_font, QFont.Weight.Medium))
+        for cell in self._fret_cells:
+            cell.setFixedSize(cell_w, cell_h)
+        for marker in self._open_markers:
+            marker.setFixedSize(marker_size, marker_size)
+            marker.setFont(QFont("Segoe UI", marker_font, QFont.Weight.Bold))
+        for marker in self._note_markers:
+            marker.setFixedSize(marker_size, marker_size)
+            marker.setFont(QFont("Segoe UI", marker_font, QFont.Weight.Bold))
+
+        if hasattr(self, "_grid_title") and self._grid_title is not None:
+            self._grid_title.setFont(QFont("Segoe UI", title_font, QFont.Weight.DemiBold))
 
 
 class ScaleFretboardWindow(QMainWindow):
     """Show stacked fretboard diagrams for notes and corresponding degrees."""
-    def __init__(self, scale_name: str, scale_notes):
+    closed = Signal(str)
+
+    def __init__(self, scale_name: str, scale_notes, degree_labels, fret_count: int, display_mode: str):
         """Create a titled fretboard window from a normalised note sequence."""
         super().__init__()
         self.scale_name = scale_name
         self.scale_notes = scale_notes
-        self.degree_by_note = {note: str(i + 1) for i, note in enumerate(self.scale_notes)}
+        self.degree_labels = degree_labels
+        self.degree_by_note = {note: degree_labels[i] for i, note in enumerate(self.scale_notes)}
+        self.fret_count = fret_count
+        self.display_mode = display_mode  # "Notes", "Degrees", "Both"
         self.setWindowTitle(f"Scale Fretboard: {self.scale_name}")
-        self.resize(1100, 720)
+        self.resize(1260, 760)
+        self.setMinimumSize(630, 380)
         self._build_ui()
 
     def _build_ui(self):
         """Compose the title, note summary, and two fretboard diagrams."""
+        outer_root = QWidget()
+        self.setCentralWidget(outer_root)
+        outer_layout = QVBoxLayout(outer_root)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        outer_layout.addWidget(scroll)
+
         root = QWidget()
-        self.setCentralWidget(root)
+        root.setObjectName("scaleRoot")
+        scroll.setWidget(root)
+
         layout = QVBoxLayout(root)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(12)
@@ -707,12 +797,38 @@ class ScaleFretboardWindow(QMainWindow):
         title.setObjectName("scaleTitle")
         layout.addWidget(title)
 
-        subtitle = QLabel(f"Notes: {', '.join(self.scale_notes)}")
-        subtitle.setObjectName("muted")
-        layout.addWidget(subtitle)
+        meta_grid = QGridLayout()
+        meta_grid.setHorizontalSpacing(8)
+        meta_grid.setVerticalSpacing(6)
+        notes_title = QLabel("Notes of the scale:")
+        notes_title.setObjectName("scaleMetaTitle")
+        degrees_title = QLabel("Degrees formula:")
+        degrees_title.setObjectName("scaleMetaTitle")
+        meta_grid.addWidget(notes_title, 0, 0)
+        meta_grid.addWidget(degrees_title, 1, 0)
+        for i, note in enumerate(self.scale_notes):
+            note_chip = QLabel(note)
+            note_chip.setObjectName("scaleNoteChip")
+            note_chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            degree_chip = QLabel(self.degree_labels[i])
+            degree_chip.setObjectName("scaleDegreeChip")
+            degree_chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            meta_grid.addWidget(note_chip, 0, i + 1)
+            meta_grid.addWidget(degree_chip, 1, i + 1)
+        meta_grid.setColumnStretch(len(self.scale_notes) + 1, 1)
+        layout.addLayout(meta_grid)
 
-        layout.addWidget(FretboardGrid(self.scale_notes, self.degree_by_note, "note"))
-        layout.addWidget(FretboardGrid(self.scale_notes, self.degree_by_note, "degree"))
+        notes_grid = FretboardGrid(self.scale_notes, self.degree_by_note, "note", self.fret_count)
+        degrees_grid = FretboardGrid(self.scale_notes, self.degree_by_note, "degree", self.fret_count)
+        if self.display_mode in ("Notes", "Both"):
+            layout.addWidget(notes_grid)
+        if self.display_mode in ("Degrees", "Both"):
+            layout.addWidget(degrees_grid)
+
+    def closeEvent(self, event: QCloseEvent):
+        """Notify parent workbench when this fretboard window is closed."""
+        self.closed.emit(self.scale_name)
+        super().closeEvent(event)
 
 
 class ScaleWorkbenchWindow(QMainWindow):
@@ -721,7 +837,7 @@ class ScaleWorkbenchWindow(QMainWindow):
         """Initialise controls used to define and open scale fretboards."""
         super().__init__()
         self.setWindowTitle("Scale Notation to Fretboard (PoC)")
-        self.resize(760, 300)
+        self.resize(820, 360)
         self.fretboard_windows = []
         self._build_ui()
 
@@ -753,6 +869,22 @@ class ScaleWorkbenchWindow(QMainWindow):
         form.addWidget(QLabel("Scale notes"), 1, 0)
         self.scale_notes_input = QLineEdit("A, B, C, D, E, F, G")
         form.addWidget(self.scale_notes_input, 1, 1)
+
+        form.addWidget(QLabel("Degrees formula"), 2, 0)
+        self.degree_input = QLineEdit("1, 2, b3, 4, 5, b6, b7")
+        form.addWidget(self.degree_input, 2, 1)
+
+        form.addWidget(QLabel("Fret range"), 3, 0)
+        self.fret_count_input = QComboBox()
+        self.fret_count_input.addItems(["12", "24"])
+        self.fret_count_input.setCurrentText("24")
+        form.addWidget(self.fret_count_input, 3, 1)
+
+        form.addWidget(QLabel("Display"), 4, 0)
+        self.display_mode_input = QComboBox()
+        self.display_mode_input.addItems(["Both", "Note Positions", "Scale Degrees"])
+        self.display_mode_input.setCurrentText("Both")
+        form.addWidget(self.display_mode_input, 4, 1)
         layout.addLayout(form)
 
         actions = QHBoxLayout()
@@ -786,11 +918,36 @@ class ScaleWorkbenchWindow(QMainWindow):
             self.status.setText("No valid notes were provided.")
             return
 
+        degree_raw = [part.strip() for part in self.degree_input.text().split(",") if part.strip()]
+        if degree_raw and len(degree_raw) != len(normalised):
+            self.status.setText("Degrees formula count must match the number of notes.")
+            return
+        degree_labels = degree_raw if degree_raw else [str(i + 1) for i in range(len(normalised))]
+
         name = self.scale_name_input.text().strip() or "Custom Scale"
-        window = ScaleFretboardWindow(name, normalised)
+        fret_count = int(self.fret_count_input.currentText())
+        display_choice = self.display_mode_input.currentText()
+        display_mode = "Both"
+        if display_choice == "Note Positions":
+            display_mode = "Notes"
+        elif display_choice == "Scale Degrees":
+            display_mode = "Degrees"
+        window = ScaleFretboardWindow(name, normalised, degree_labels, fret_count, display_mode)
+        window.closed.connect(self.on_fretboard_closed)
         window.show()
         self.fretboard_windows.append(window)
-        self.status.setText(f"Opened fretboard window: {name}")
+        self.status.setText(f"Fretboard windows open: {len(self.fretboard_windows)}")
+
+    def on_fretboard_closed(self, scale_name: str):
+        """Track only live fretboard windows and clear status when none remain."""
+        closed_window = self.sender()
+        if closed_window in self.fretboard_windows:
+            self.fretboard_windows.remove(closed_window)
+        self.fretboard_windows = [w for w in self.fretboard_windows if w is not None and w.isVisible()]
+        if self.fretboard_windows:
+            self.status.setText(f"Fretboard windows open: {len(self.fretboard_windows)}")
+        else:
+            self.status.setText("")
 
 
 class MainWindow(QMainWindow):
@@ -984,11 +1141,41 @@ def build_app() -> QApplication:
             font-weight: 700;
         }
         QLabel#scaleTitle {
-            font-size: 28px;
+            font-size: 42px;
             font-weight: 700;
         }
+        QWidget#scaleRoot {
+            background: #12161d;
+        }
+        QLabel#scaleMetaTitle {
+            color: #c9d9ea;
+            font-size: 30px;
+            font-weight: 600;
+            padding-right: 8px;
+        }
+        QLabel#scaleNoteChip {
+            min-width: 34px;
+            max-width: 34px;
+            min-height: 34px;
+            max-height: 34px;
+            border-radius: 6px;
+            background: #202b39;
+            border: 1px solid #3b4f67;
+            color: #eaf3ff;
+            font-size: 17px;
+            font-weight: 700;
+        }
+        QLabel#scaleDegreeChip {
+            min-width: 34px;
+            max-width: 34px;
+            min-height: 24px;
+            max-height: 24px;
+            color: #d6e3f1;
+            font-size: 18px;
+            font-weight: 600;
+        }
         QLabel#fretboardTitle {
-            font-size: 20px;
+            font-size: 28px;
             font-weight: 700;
             color: #dbe8f4;
             padding-bottom: 4px;
@@ -997,20 +1184,41 @@ def build_app() -> QApplication:
             color: #9cb0c6;
             font-size: 15px;
             font-weight: 600;
-            min-width: 52px;
-            max-width: 52px;
-            min-height: 28px;
+        }
+        QLabel#fretNumBottom {
+            color: #9cb0c6;
+            font-size: 15px;
+            font-weight: 600;
+            padding-top: 6px;
         }
         QLabel#openString {
-            min-width: 40px;
-            max-width: 40px;
-            min-height: 40px;
-            max-height: 40px;
             border-radius: 20px;
             background: #8192b0;
             color: #eef5ff;
             font-size: 18px;
             font-weight: 700;
+        }
+        QLabel#openStringInScale {
+            min-width: 40px;
+            max-width: 40px;
+            min-height: 40px;
+            max-height: 40px;
+            border-radius: 20px;
+            background: #2f4b86;
+            color: #f6fbff;
+            font-size: 18px;
+            font-weight: 800;
+        }
+        QLabel#openStringRoot {
+            min-width: 40px;
+            max-width: 40px;
+            min-height: 40px;
+            max-height: 40px;
+            border-radius: 6px;
+            background: #2f4b86;
+            color: #f6fbff;
+            font-size: 18px;
+            font-weight: 800;
         }
         QFrame#fretboardCard {
             background: #1b2430;
@@ -1018,31 +1226,20 @@ def build_app() -> QApplication:
             border-radius: 10px;
         }
         QFrame#fretCell {
-            min-width: 52px;
-            max-width: 52px;
-            min-height: 44px;
-            max-height: 44px;
             border-right: 1px solid #41526a;
             border-bottom: 1px solid #41526a;
             background: transparent;
         }
         QLabel#fretMarker {
-            min-width: 34px;
-            max-width: 34px;
-            min-height: 34px;
-            max-height: 34px;
             border-radius: 17px;
-            background: #8495b4;
+            background: transparent;
+            border: 2px solid #d17a23;
             color: #f2f7ff;
             font-size: 16px;
             font-weight: 700;
         }
         QLabel#fretMarkerRoot {
-            min-width: 34px;
-            max-width: 34px;
-            min-height: 34px;
-            max-height: 34px;
-            border-radius: 17px;
+            border-radius: 6px;
             background: #2f4b86;
             color: #f6fbff;
             font-size: 16px;
