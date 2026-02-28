@@ -49,6 +49,7 @@ def parse_device_id(text: str) -> int:
 
 
 def normalise_note_name(note: str):
+    """Normalise user-entered note text to sharp-based chromatic notation."""
     raw = (note or "").strip()
     if not raw:
         return None
@@ -59,18 +60,21 @@ def normalise_note_name(note: str):
 
 
 def note_at_fret(open_note: str, fret: int):
+    """Return the note name at a given fret for a specific open string note."""
     idx = CHROMATIC_SHARPS.index(open_note)
     return CHROMATIC_SHARPS[(idx + fret) % 12]
 
 
 # Background worker for note-trainer gameplay so the UI thread stays responsive.
 class NoteTrainerWorker(QThread):
+    """Run note-trainer gameplay off the UI thread and emit progress events."""
     trial_start = Signal(str, str, str, int, int)  # string, low_high, note, trial_idx, total
     trial_result = Signal(bool)
     game_complete = Signal(int, int, str, bool)  # num_correct, trials_attempted, best_score, cancelled
     game_error = Signal(str)
 
     def __init__(self, input_device: int, time_per_guess: int, total_trials: int):
+        """Store game configuration and initialise a cancellation event."""
         super().__init__()
         self.input_device = input_device
         self.time_per_guess = time_per_guess
@@ -78,9 +82,11 @@ class NoteTrainerWorker(QThread):
         self.cancel_event = threading.Event()
 
     def request_cancel(self):
+        """Signal the worker loop to stop after the current safe checkpoint."""
         self.cancel_event.set()
 
     def run(self):
+        """Execute the trial loop and persist per-trial/final score data."""
         trainer = NoteTrainer(self.input_device)
         num_correct = 0
         trials_attempted = 0
@@ -139,9 +145,11 @@ class NoteTrainerWorker(QThread):
 
 
 class TunerWindow(QMainWindow):
+    """Live guitar tuner window backed by the audio analyser thread."""
     closed = Signal()
 
     def __init__(self, input_device: int):
+        """Initialise analyser state, build the UI and start polling updates."""
         super().__init__()
         self.setWindowTitle("Guitar Trainer: Tuner")
         self.resize(1080, 720)
@@ -267,6 +275,7 @@ class TunerWindow(QMainWindow):
         self.tune_up_label.style().polish(self.tune_up_label)
 
     def closeEvent(self, event: QCloseEvent):
+        """Stop timers/threads cleanly before the tuner window closes."""
         if hasattr(self, "timer") and self.timer is not None:
             self.timer.stop()
         if hasattr(self, "audio_analyser") and self.audio_analyser is not None:
@@ -277,7 +286,9 @@ class TunerWindow(QMainWindow):
 
 
 class HighScoresWindow(QMainWindow):
+    """Display stored note-trainer high scores for selected game settings."""
     def __init__(self):
+        """Load score setting combinations and build the high-score table UI."""
         super().__init__()
         self.setWindowTitle("Note Trainer: High Scores")
         self.resize(900, 620)
@@ -317,6 +328,7 @@ class HighScoresWindow(QMainWindow):
             self.info.setText("No scores recorded yet.")
 
     def reload_table(self):
+        """Refresh table rows for the currently selected trial/time combination."""
         if not self.past_combos:
             return
         trials, time_per_guess = self.past_combos[self.combo.currentIndex()]
@@ -330,7 +342,9 @@ class HighScoresWindow(QMainWindow):
 
 
 class MissedNotesWindow(QMainWindow):
+    """Display a chart of the most frequently missed target notes."""
     def __init__(self):
+        """Create the missed-notes window and render the initial chart."""
         super().__init__()
         self.setWindowTitle("Note Trainer: Missed Notes")
         self.resize(980, 680)
@@ -373,6 +387,7 @@ class MissedNotesWindow(QMainWindow):
         layout.addWidget(self.canvas, stretch=1)
 
     def replot(self):
+        """Recreate and restyle the chart when the top-N value changes."""
         self.canvas.setParent(None)
         self.figure = create_incorrect_bar_chart(self.top_n.value())
         self._style_chart(self.figure)
@@ -402,9 +417,11 @@ class MissedNotesWindow(QMainWindow):
 
 
 class NoteTrainerWindow(QMainWindow):
+    """Interactive note-trainer session window with threaded gameplay."""
     closed = Signal()
 
     def __init__(self, input_device: int):
+        """Store selected input device and set up note-trainer controls."""
         super().__init__()
         self.setWindowTitle("Guitar Trainer: Note Trainer")
         self.resize(1080, 720)
@@ -504,6 +521,7 @@ class NoteTrainerWindow(QMainWindow):
         right_layout.addStretch(1)
 
     def set_busy(self, busy: bool):
+        """Toggle controls to prevent conflicting actions while a session runs."""
         self.start_btn.setEnabled(not busy)
         self.cancel_btn.setEnabled(busy)
         self.high_btn.setEnabled(not busy)
@@ -512,6 +530,7 @@ class NoteTrainerWindow(QMainWindow):
         self.total_trials.setEnabled(not busy)
 
     def _clear_progress(self):
+        """Remove all progress markers from the current session row."""
         while self.progress_row.count():
             item = self.progress_row.takeAt(0)
             widget = item.widget()
@@ -534,6 +553,7 @@ class NoteTrainerWindow(QMainWindow):
         self.progress_row.addStretch(1)
 
     def start_session(self):
+        """Create and start a worker thread for a new trainer session."""
         if self.worker is not None and self.worker.isRunning():
             return
 
@@ -551,6 +571,7 @@ class NoteTrainerWindow(QMainWindow):
         self.worker.start()
 
     def cancel_session(self):
+        """Request cancellation and disable repeated cancel clicks."""
         if self.worker is None or not self.worker.isRunning():
             return
         self.worker.request_cancel()
@@ -558,6 +579,7 @@ class NoteTrainerWindow(QMainWindow):
         self.status.setText("Cancelling after current trial...")
 
     def on_trial_start(self, string: str, low_high: str, note: str, trial_idx: int, total: int):
+        """Update prompt labels when a new trial begins."""
         display_note = note.replace("â™¯", "#").replace("â™­", "b").replace("♯", "#").replace("♭", "b")
         self.string_label.setText(f"{string} string")
         self.low_high_label.setText(low_high)
@@ -574,6 +596,7 @@ class NoteTrainerWindow(QMainWindow):
         self.trial_index += 1
 
     def on_game_complete(self, num_correct: int, trials_attempted: int, best_score: str, cancelled: bool):
+        """Display end-of-session summary and restore interactive controls."""
         if trials_attempted > 0:
             self.string_label.setText("Session complete")
             self.low_high_label.setText(f"{num_correct}/{trials_attempted} correct")
@@ -582,18 +605,22 @@ class NoteTrainerWindow(QMainWindow):
         self.set_busy(False)
 
     def on_game_error(self, message: str):
+        """Surface worker errors in the status area and unlock controls."""
         self.status.setText(f"Session failed: {message}")
         self.set_busy(False)
 
     def open_high_scores(self):
+        """Open the high-score history window."""
         self.hs = HighScoresWindow()
         self.hs.show()
 
     def open_missed_notes(self):
+        """Open the missed-notes chart window."""
         self.mn = MissedNotesWindow()
         self.mn.show()
 
     def closeEvent(self, event: QCloseEvent):
+        """Attempt graceful worker shutdown before closing the window."""
         if self.worker is not None and self.worker.isRunning():
             self.worker.request_cancel()
             self.worker.wait(3000)
@@ -602,7 +629,9 @@ class NoteTrainerWindow(QMainWindow):
 
 
 class FretboardGrid(QFrame):
+    """Render a 6x12 fretboard grid showing either notes or scale degrees."""
     def __init__(self, scale_notes, degree_by_note, display_mode: str):
+        """Capture scale data and render the requested fretboard mode."""
         super().__init__()
         self.scale_notes = set(scale_notes)
         self.degree_by_note = degree_by_note
@@ -610,6 +639,7 @@ class FretboardGrid(QFrame):
         self._build_ui()
 
     def _build_ui(self):
+        """Build fretboard cells, open-string labels, and highlighted markers."""
         self.setObjectName("fretboardCard")
         layout = QGridLayout(self)
         layout.setContentsMargins(14, 14, 14, 14)
@@ -654,7 +684,9 @@ class FretboardGrid(QFrame):
 
 
 class ScaleFretboardWindow(QMainWindow):
+    """Show stacked fretboard diagrams for notes and corresponding degrees."""
     def __init__(self, scale_name: str, scale_notes):
+        """Create a titled fretboard window from a normalised note sequence."""
         super().__init__()
         self.scale_name = scale_name
         self.scale_notes = scale_notes
@@ -664,6 +696,7 @@ class ScaleFretboardWindow(QMainWindow):
         self._build_ui()
 
     def _build_ui(self):
+        """Compose the title, note summary, and two fretboard diagrams."""
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
@@ -683,7 +716,9 @@ class ScaleFretboardWindow(QMainWindow):
 
 
 class ScaleWorkbenchWindow(QMainWindow):
+    """PoC workbench for entering custom scales and opening diagram windows."""
     def __init__(self):
+        """Initialise controls used to define and open scale fretboards."""
         super().__init__()
         self.setWindowTitle("Scale Notation to Fretboard (PoC)")
         self.resize(760, 300)
@@ -691,6 +726,7 @@ class ScaleWorkbenchWindow(QMainWindow):
         self._build_ui()
 
     def _build_ui(self):
+        """Build input form and launch action for fretboard windows."""
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
@@ -731,6 +767,7 @@ class ScaleWorkbenchWindow(QMainWindow):
         layout.addWidget(self.status)
 
     def open_fretboard_window(self):
+        """Parse/validate input notes and open a new independent fretboard view."""
         raw_notes = [part.strip() for part in self.scale_notes_input.text().split(",") if part.strip()]
         if not raw_notes:
             self.status.setText("Enter at least one note.")
@@ -757,7 +794,9 @@ class ScaleWorkbenchWindow(QMainWindow):
 
 
 class MainWindow(QMainWindow):
+    """Application landing window with mode launchers and device selection."""
     def __init__(self):
+        """Initialise app-level windows, then build and populate the main view."""
         super().__init__()
         self.setWindowTitle("Guitar Trainer")
         self.resize(1080, 720)
@@ -835,6 +874,7 @@ class MainWindow(QMainWindow):
         layout.addStretch(1)
 
     def refresh_devices(self):
+        """Reload available audio input devices and update control availability."""
         devices = self.device_lister.show_devices("input")
         self.device_combo.clear()
         self.device_combo.addItems(devices)
@@ -858,12 +898,14 @@ class MainWindow(QMainWindow):
             self.status.setText("Connect an audio input and refresh.")
 
     def selected_device_id(self):
+        """Parse and validate the selected input-device identifier."""
         text = self.device_combo.currentText().strip()
         if not text.startswith("Input Device "):
             raise ValueError("No valid input device selected.")
         return parse_device_id(text)
 
     def confirm_device(self):
+        """Persist user intent by showing the currently selected device in status."""
         try:
             did = self.selected_device_id()
             self.status.setText(f"Input Device {did} selected.")
@@ -871,6 +913,7 @@ class MainWindow(QMainWindow):
             self.status.setText("Please choose a valid input device.")
 
     def open_tuner(self):
+        """Open the tuner window for the currently selected input device."""
         try:
             did = self.selected_device_id()
         except ValueError:
@@ -882,6 +925,7 @@ class MainWindow(QMainWindow):
         self.hide()
 
     def open_note_trainer(self):
+        """Open the note-trainer window for the currently selected input device."""
         try:
             did = self.selected_device_id()
         except ValueError:
@@ -893,6 +937,7 @@ class MainWindow(QMainWindow):
         self.hide()
 
     def open_scale_mapper(self):
+        """Open the scale-to-fretboard PoC workbench window."""
         self.scale_window = ScaleWorkbenchWindow()
         self.scale_window.show()
 
