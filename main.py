@@ -1,13 +1,8 @@
-from tkinter import Entry, Frame, Canvas, Label
-import ttkbootstrap as tb
-from ui.main_menu import MainMenu
+from qt_ui.app import MainWindow, build_app
+
 
 if __name__ == "__main__":
-    app = MainMenu()
-    app.mainloop()
-
-
-'''
-Code for UIs adapted from this post:
-https://stackoverflow.com/questions/77404923/what-is-the-proper-way-to-apply-style-in-ttkbootstrap
-'''
+    app = build_app()
+    window = MainWindow()
+    window.show()
+    app.exec()
