@@ -1,5 +1,12 @@
 /.spyproject
-/__pycache__
 /backups
 score_database
 .venv/
+
+# Python caches and compiled artefacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local Codex diff workspace
+Z_Codex_Diffs/

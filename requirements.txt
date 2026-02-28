@@ -6,12 +6,10 @@ kiwisolver==1.4.9
 matplotlib==3.10.7
 numpy==2.3.4
 packaging==25.0
-pillow==11.3.0
 playsound3==3.2.8
 pyaudio==0.2.14
 pyparsing==3.2.5
 python-dateutil==2.9.0.post0
 pywin32==311
 six==1.17.0
-ttkbootstrap==1.18.0
 PySide6==6.8.1
