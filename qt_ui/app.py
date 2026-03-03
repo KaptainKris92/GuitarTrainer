@@ -1,19 +1,25 @@
+import math
 import threading
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+import numpy as np
+import pyaudio
 from PySide6.QtCore import QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QFont, QFontMetrics
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -21,6 +27,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from functions.calibration_settings import (
+    DEFAULT_INPUT_RMS_THRESHOLD,
+    load_calibration_settings,
+    save_calibration_settings,
+)
 from functions.get_device_list import DeviceLister
 from functions.note_trainer import NoteTrainer
 from functions.sql_funcs import (
@@ -37,30 +48,84 @@ from tuner_utils.settings import Settings
 from tuner_utils.threading_helper import ProtectedList
 
 
+CHROMATIC_SHARPS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+FLAT_TO_SHARP = {"DB": "C#", "EB": "D#", "GB": "F#", "AB": "G#", "BB": "A#"}
+FRETBOARD_STRING_NOTES = ["E", "B", "G", "D", "A", "E"]  # Top to bottom (high E to low E)
+
+
 # Convert the selected device combo text into the numeric device index.
 def parse_device_id(text: str) -> int:
     return int(text.split(" - ", 1)[0].replace("Input Device ", "").strip())
 
 
+def normalise_note_name(note: str):
+    """Normalise user-entered note text to sharp-based chromatic notation."""
+    raw = (note or "").strip()
+    if not raw:
+        return None
+    n = raw.upper().replace("♯", "#").replace("♭", "B")
+    if n in FLAT_TO_SHARP:
+        return FLAT_TO_SHARP[n]
+    return n if n in CHROMATIC_SHARPS else None
+
+
+def note_at_fret(open_note: str, fret: int):
+    """Return the note name at a given fret for a specific open string note."""
+    idx = CHROMATIC_SHARPS.index(open_note)
+    return CHROMATIC_SHARPS[(idx + fret) % 12]
+
+
+def rms_to_db(rms: float) -> float:
+    """Convert RMS amplitude to dBFS for calibration display."""
+    return 20.0 * math.log10(max(float(rms), 1e-8))
+
+
+def db_to_rms(db: float) -> float:
+    """Convert dBFS threshold to RMS amplitude used by detection logic."""
+    return float(10 ** (float(db) / 20.0))
+
+
 # Background worker for note-trainer gameplay so the UI thread stays responsive.
 class NoteTrainerWorker(QThread):
+    """Run note-trainer gameplay off the UI thread and emit progress events."""
     trial_start = Signal(str, str, str, int, int)  # string, low_high, note, trial_idx, total
+    trial_timer = Signal(float, float)  # remaining_seconds, remaining_fraction
     trial_result = Signal(bool)
     game_complete = Signal(int, int, str, bool)  # num_correct, trials_attempted, best_score, cancelled
     game_error = Signal(str)
 
-    def __init__(self, input_device: int, time_per_guess: int, total_trials: int):
+    def __init__(
+        self,
+        input_device: int,
+        time_per_guess: int,
+        total_trials: int,
+        input_rms_threshold: float,
+        end_on_correct: bool,
+        end_on_incorrect: bool,
+    ):
+        """Store game configuration and initialise a cancellation event."""
         super().__init__()
         self.input_device = input_device
         self.time_per_guess = time_per_guess
         self.total_trials = total_trials
+        self.input_rms_threshold = input_rms_threshold
+        self.end_on_correct = end_on_correct
+        self.end_on_incorrect = end_on_incorrect
         self.cancel_event = threading.Event()
 
+    def _emit_timer(self, remaining_seconds: float, remaining_fraction: float):
+        self.trial_timer.emit(remaining_seconds, remaining_fraction)
+
     def request_cancel(self):
+        """Signal the worker loop to stop after the current safe checkpoint."""
         self.cancel_event.set()
 
     def run(self):
-        trainer = NoteTrainer(self.input_device)
+        """Execute the trial loop and persist per-trial/final score data."""
+        trainer = NoteTrainer(
+            self.input_device,
+            input_rms_threshold=self.input_rms_threshold,
+        )
         num_correct = 0
         trials_attempted = 0
         game_id = get_current_game_id()
@@ -84,6 +149,9 @@ class NoteTrainerWorker(QThread):
                     low_high=target["low_high"],
                     note=target["note"],
                     stop_event=self.cancel_event,
+                    end_on_correct=self.end_on_correct,
+                    end_on_incorrect=self.end_on_incorrect,
+                    countdown_callback=self._emit_timer,
                 )
                 if result.get("cancelled"):
                     break
@@ -117,10 +185,172 @@ class NoteTrainerWorker(QThread):
             self.game_error.emit(str(exc))
 
 
+class CalibrationWorker(QThread):
+    """Continuously sample input RMS level and emit threshold detection state."""
+    level_sample = Signal(float, bool)  # rms_value, input_detected
+    worker_error = Signal(str)
+
+    def __init__(self, input_device: int, input_rms_threshold: float):
+        super().__init__()
+        self.input_device = input_device
+        self.input_rms_threshold = max(0.0, float(input_rms_threshold))
+        self.stop_event = threading.Event()
+
+    def update_threshold(self, input_rms_threshold: float):
+        self.input_rms_threshold = max(0.0, float(input_rms_threshold))
+
+    def request_stop(self):
+        self.stop_event.set()
+
+    def run(self):
+        p = pyaudio.PyAudio()
+        stream = None
+        try:
+            stream = p.open(
+                format=pyaudio.paFloat32,
+                channels=1,
+                rate=44100,
+                input=True,
+                frames_per_buffer=1024,
+                input_device_index=self.input_device,
+            )
+            while not self.stop_event.is_set():
+                audiobuffer = stream.read(1024, exception_on_overflow=False)
+                signal = np.frombuffer(audiobuffer, dtype=np.float32)
+                rms = float(np.sqrt(np.mean(np.square(signal)))) if signal.size else 0.0
+                self.level_sample.emit(rms, rms >= self.input_rms_threshold)
+        except Exception as exc:
+            self.worker_error.emit(str(exc))
+        finally:
+            if stream is not None:
+                stream.stop_stream()
+                stream.close()
+            p.terminate()
+
+
+class CalibrationWindow(QMainWindow):
+    """Calibrate input threshold against ambient noise and quiet note playing."""
+    threshold_saved = Signal(float)
+
+    def __init__(self, input_device: int, input_rms_threshold: float):
+        super().__init__()
+        self.setWindowTitle("Note Trainer: Input Calibration")
+        self.resize(760, 420)
+        self.input_device = input_device
+        self.input_rms_threshold = max(0.0, float(input_rms_threshold))
+        self.worker = None
+        self._build_ui()
+        self._start_worker()
+
+    def _build_ui(self):
+        root = QWidget()
+        self.setCentralWidget(root)
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("Input Calibration")
+        title.setFont(QFont("Segoe UI", 22, QFont.Weight.DemiBold))
+        layout.addWidget(title)
+
+        instructions = QLabel(
+            "1) Keep quiet and ensure detection stays off.\n"
+            "2) Play the quietest note that should count as input.\n"
+            "3) Raise/lower threshold until detection behaves as expected."
+        )
+        instructions.setObjectName("muted")
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+
+        card = QFrame()
+        card.setObjectName("card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(14, 14, 14, 14)
+        card_layout.setSpacing(10)
+        layout.addWidget(card)
+
+        threshold_row = QHBoxLayout()
+        threshold_row.addWidget(QLabel("Detection threshold (dBFS)"))
+        self.threshold_spin = QSpinBox()
+        self.threshold_spin.setObjectName("calibrationThresholdSpin")
+        self.threshold_spin.setRange(-80, -20)
+        initial_threshold_db = int(round(rms_to_db(self.input_rms_threshold)))
+        self.threshold_spin.setValue(max(-80, min(-20, initial_threshold_db)))
+        self.threshold_spin.setMinimumWidth(110)
+        self.input_rms_threshold = db_to_rms(float(self.threshold_spin.value()))
+        self.threshold_spin.valueChanged.connect(self.on_threshold_changed)
+        threshold_row.addWidget(self.threshold_spin)
+        threshold_row.addStretch(1)
+        card_layout.addLayout(threshold_row)
+
+        self.level_label = QLabel("Current level: -- dBFS")
+        self.level_label.setObjectName("muted")
+        card_layout.addWidget(self.level_label)
+
+        self.level_bar = QProgressBar()
+        self.level_bar.setRange(0, 100)
+        self.level_bar.setValue(0)
+        self.level_bar.setTextVisible(False)
+        card_layout.addWidget(self.level_bar)
+
+        self.detect_label = QLabel("NO INPUT DETECTED")
+        self.detect_label.setObjectName("calibrationDetectOff")
+        self.detect_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        card_layout.addWidget(self.detect_label)
+
+        actions = QHBoxLayout()
+        self.save_btn = QPushButton("Save Threshold")
+        self.save_btn.clicked.connect(self.save_threshold)
+        actions.addWidget(self.save_btn)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        self.status = QLabel("Adjust threshold, then save.")
+        self.status.setObjectName("muted")
+        layout.addWidget(self.status)
+
+    def _start_worker(self):
+        self.worker = CalibrationWorker(self.input_device, self.input_rms_threshold)
+        self.worker.level_sample.connect(self.on_level_sample)
+        self.worker.worker_error.connect(self.on_worker_error)
+        self.worker.start()
+
+    def on_threshold_changed(self, threshold_db: int):
+        self.input_rms_threshold = db_to_rms(float(threshold_db))
+        if self.worker is not None and self.worker.isRunning():
+            self.worker.update_threshold(self.input_rms_threshold)
+
+    def on_level_sample(self, rms: float, detected: bool):
+        dbfs = rms_to_db(rms)
+        normalised = int(max(0, min(100, ((dbfs + 80.0) / 60.0) * 100.0)))
+        self.level_label.setText(f"Current level: {dbfs:.1f} dBFS")
+        self.level_bar.setValue(normalised)
+        self.detect_label.setText("INPUT DETECTED" if detected else "NO INPUT DETECTED")
+        self.detect_label.setObjectName("calibrationDetectOn" if detected else "calibrationDetectOff")
+        self.detect_label.style().unpolish(self.detect_label)
+        self.detect_label.style().polish(self.detect_label)
+
+    def on_worker_error(self, message: str):
+        self.status.setText(f"Calibration input failed: {message}")
+
+    def save_threshold(self):
+        save_calibration_settings(self.input_rms_threshold)
+        self.threshold_saved.emit(self.input_rms_threshold)
+        self.status.setText("Threshold saved.")
+
+    def closeEvent(self, event: QCloseEvent):
+        if self.worker is not None and self.worker.isRunning():
+            self.worker.request_stop()
+            self.worker.wait(1500)
+        super().closeEvent(event)
+
+
 class TunerWindow(QMainWindow):
+    """Live guitar tuner window backed by the audio analyser thread."""
     closed = Signal()
 
     def __init__(self, input_device: int):
+        """Initialise analyser state, build the UI and start polling updates."""
         super().__init__()
         self.setWindowTitle("Guitar Trainer: Tuner")
         self.resize(1080, 720)
@@ -246,6 +476,7 @@ class TunerWindow(QMainWindow):
         self.tune_up_label.style().polish(self.tune_up_label)
 
     def closeEvent(self, event: QCloseEvent):
+        """Stop timers/threads cleanly before the tuner window closes."""
         if hasattr(self, "timer") and self.timer is not None:
             self.timer.stop()
         if hasattr(self, "audio_analyser") and self.audio_analyser is not None:
@@ -256,7 +487,9 @@ class TunerWindow(QMainWindow):
 
 
 class HighScoresWindow(QMainWindow):
+    """Display stored note-trainer high scores for selected game settings."""
     def __init__(self):
+        """Load score setting combinations and build the high-score table UI."""
         super().__init__()
         self.setWindowTitle("Note Trainer: High Scores")
         self.resize(900, 620)
@@ -296,6 +529,7 @@ class HighScoresWindow(QMainWindow):
             self.info.setText("No scores recorded yet.")
 
     def reload_table(self):
+        """Refresh table rows for the currently selected trial/time combination."""
         if not self.past_combos:
             return
         trials, time_per_guess = self.past_combos[self.combo.currentIndex()]
@@ -309,7 +543,9 @@ class HighScoresWindow(QMainWindow):
 
 
 class MissedNotesWindow(QMainWindow):
+    """Display a chart of the most frequently missed target notes."""
     def __init__(self):
+        """Create the missed-notes window and render the initial chart."""
         super().__init__()
         self.setWindowTitle("Note Trainer: Missed Notes")
         self.resize(980, 680)
@@ -352,6 +588,7 @@ class MissedNotesWindow(QMainWindow):
         layout.addWidget(self.canvas, stretch=1)
 
     def replot(self):
+        """Recreate and restyle the chart when the top-N value changes."""
         self.canvas.setParent(None)
         self.figure = create_incorrect_bar_chart(self.top_n.value())
         self._style_chart(self.figure)
@@ -381,16 +618,21 @@ class MissedNotesWindow(QMainWindow):
 
 
 class NoteTrainerWindow(QMainWindow):
+    """Interactive note-trainer session window with threaded gameplay."""
     closed = Signal()
 
     def __init__(self, input_device: int):
+        """Store selected input device and set up note-trainer controls."""
         super().__init__()
         self.setWindowTitle("Guitar Trainer: Note Trainer")
         self.resize(1080, 720)
         self.input_device = input_device
+        calibration = load_calibration_settings()
+        self.input_rms_threshold = calibration.get("input_rms_threshold", DEFAULT_INPUT_RMS_THRESHOLD)
         self.worker = None
         self.progress_markers = []
         self.trial_index = 0
+        self.current_trial_duration = 0.0
         self._build_ui()
 
     def _build_ui(self):
@@ -419,8 +661,10 @@ class NoteTrainerWindow(QMainWindow):
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Time per trial (seconds)"))
         self.time_per_guess = QSpinBox()
+        self.time_per_guess.setObjectName("sessionSpin")
         self.time_per_guess.setRange(1, 30)
         self.time_per_guess.setValue(1)
+        self.time_per_guess.setMinimumWidth(94)
         row1.addWidget(self.time_per_guess)
         row1.addStretch(1)
         left_layout.addLayout(row1)
@@ -428,11 +672,23 @@ class NoteTrainerWindow(QMainWindow):
         row2 = QHBoxLayout()
         row2.addWidget(QLabel("Total trials"))
         self.total_trials = QSpinBox()
+        self.total_trials.setObjectName("sessionSpin")
         self.total_trials.setRange(1, 100)
         self.total_trials.setValue(10)
+        self.total_trials.setMinimumWidth(94)
         row2.addWidget(self.total_trials)
         row2.addStretch(1)
         left_layout.addLayout(row2)
+
+        self.end_on_correct_toggle = QCheckBox("End trial early when correct note is detected")
+        self.end_on_correct_toggle.setObjectName("sessionOptionCheck")
+        self.end_on_correct_toggle.setChecked(False)
+        left_layout.addWidget(self.end_on_correct_toggle)
+
+        self.end_on_incorrect_toggle = QCheckBox("End trial early when incorrect note is detected")
+        self.end_on_incorrect_toggle.setObjectName("sessionOptionCheck")
+        self.end_on_incorrect_toggle.setChecked(False)
+        left_layout.addWidget(self.end_on_incorrect_toggle)
 
         self.start_btn = QPushButton("Start Session")
         self.start_btn.clicked.connect(self.start_session)
@@ -452,7 +708,9 @@ class NoteTrainerWindow(QMainWindow):
         stats_row.addWidget(self.missed_btn)
         left_layout.addLayout(stats_row)
 
-        self.status = QLabel("Configure your session and press Start Session.")
+        self.status = QLabel(
+            f"Configure your session and press Start Session. Threshold: {rms_to_db(self.input_rms_threshold):.1f} dBFS."
+        )
         self.status.setObjectName("muted")
         left_layout.addWidget(self.status)
         left_layout.addStretch(1)
@@ -464,6 +722,18 @@ class NoteTrainerWindow(QMainWindow):
         right_layout.setSpacing(14)
         layout.addWidget(right, 1, 1)
 
+        self.timer_label = QLabel("Time remaining: --")
+        self.timer_label.setObjectName("muted")
+        right_layout.addWidget(self.timer_label)
+
+        self.timer_bar = QProgressBar()
+        self.timer_bar.setObjectName("trialTimerBar")
+        self.timer_bar.setRange(0, 1000)
+        self.timer_bar.setValue(0)
+        self.timer_bar.setTextVisible(False)
+        self.timer_bar.setFixedHeight(14)
+        right_layout.addWidget(self.timer_bar)
+
         prompt_row = QHBoxLayout()
         self.string_label = QLabel("String")
         self.string_label.setObjectName("trainerPrompt")
@@ -471,11 +741,23 @@ class NoteTrainerWindow(QMainWindow):
         self.low_high_label.setObjectName("trainerPrompt")
         self.note_label = QLabel("Note")
         self.note_label.setObjectName("trainerPrompt")
-        for w in (self.string_label, self.low_high_label, self.note_label):
+        self.prompt_labels = [self.string_label, self.low_high_label, self.note_label]
+        for w in self.prompt_labels:
             w.setFont(QFont("Segoe UI", 36, QFont.Weight.Bold))
             prompt_row.addWidget(w)
         prompt_row.addStretch(1)
         right_layout.addLayout(prompt_row)
+
+        summary_col = QVBoxLayout()
+        self.summary_label_1 = QLabel("")
+        self.summary_label_2 = QLabel("")
+        self.summary_label_3 = QLabel("")
+        self.summary_labels = [self.summary_label_1, self.summary_label_2, self.summary_label_3]
+        for lbl in self.summary_labels:
+            lbl.setObjectName("trainerSummary")
+            lbl.setVisible(False)
+            summary_col.addWidget(lbl)
+        right_layout.addLayout(summary_col)
 
         self.progress_row = QHBoxLayout()
         self.progress_row.setSpacing(8)
@@ -483,14 +765,18 @@ class NoteTrainerWindow(QMainWindow):
         right_layout.addStretch(1)
 
     def set_busy(self, busy: bool):
+        """Toggle controls to prevent conflicting actions while a session runs."""
         self.start_btn.setEnabled(not busy)
         self.cancel_btn.setEnabled(busy)
         self.high_btn.setEnabled(not busy)
         self.missed_btn.setEnabled(not busy)
+        self.end_on_correct_toggle.setEnabled(not busy)
+        self.end_on_incorrect_toggle.setEnabled(not busy)
         self.time_per_guess.setEnabled(not busy)
         self.total_trials.setEnabled(not busy)
 
     def _clear_progress(self):
+        """Remove all progress markers from the current session row."""
         while self.progress_row.count():
             item = self.progress_row.takeAt(0)
             widget = item.widget()
@@ -512,24 +798,59 @@ class NoteTrainerWindow(QMainWindow):
             self.progress_markers.append(marker)
         self.progress_row.addStretch(1)
 
+    def _set_trial_timer(self, remaining_seconds: float, remaining_fraction: float):
+        clamped_fraction = max(0.0, min(1.0, float(remaining_fraction)))
+        self.timer_bar.setValue(int(clamped_fraction * 1000))
+        self.timer_label.setText(f"Time remaining: {max(0.0, float(remaining_seconds)):.1f}s")
+
+    def _show_prompt_mode(self):
+        for w in self.prompt_labels:
+            w.setVisible(True)
+        for w in self.summary_labels:
+            w.setVisible(False)
+
+    def _show_summary_mode(self, line1: str, line2: str, line3: str):
+        for w in self.prompt_labels:
+            w.setVisible(False)
+        lines = [line1, line2, line3]
+        for idx, w in enumerate(self.summary_labels):
+            text = lines[idx] if idx < len(lines) else ""
+            w.setText(text)
+            w.setVisible(bool(text))
+
     def start_session(self):
+        """Create and start a worker thread for a new trainer session."""
         if self.worker is not None and self.worker.isRunning():
             return
 
         time_per_guess = self.time_per_guess.value()
         total_trials = self.total_trials.value()
+        end_on_correct = self.end_on_correct_toggle.isChecked()
+        end_on_incorrect = self.end_on_incorrect_toggle.isChecked()
         self._setup_progress(total_trials)
+        self._show_prompt_mode()
         self.set_busy(True)
+        self.current_trial_duration = float(time_per_guess)
+        self._set_trial_timer(self.current_trial_duration, 1.0)
         self.status.setText("Session in progress...")
 
-        self.worker = NoteTrainerWorker(self.input_device, time_per_guess, total_trials)
+        self.worker = NoteTrainerWorker(
+            self.input_device,
+            time_per_guess,
+            total_trials,
+            self.input_rms_threshold,
+            end_on_correct,
+            end_on_incorrect,
+        )
         self.worker.trial_start.connect(self.on_trial_start)
+        self.worker.trial_timer.connect(self.on_trial_timer)
         self.worker.trial_result.connect(self.on_trial_result)
         self.worker.game_complete.connect(self.on_game_complete)
         self.worker.game_error.connect(self.on_game_error)
         self.worker.start()
 
     def cancel_session(self):
+        """Request cancellation and disable repeated cancel clicks."""
         if self.worker is None or not self.worker.isRunning():
             return
         self.worker.request_cancel()
@@ -537,11 +858,22 @@ class NoteTrainerWindow(QMainWindow):
         self.status.setText("Cancelling after current trial...")
 
     def on_trial_start(self, string: str, low_high: str, note: str, trial_idx: int, total: int):
-        display_note = note.replace("â™¯", "#").replace("â™­", "b").replace("♯", "#").replace("♭", "b")
+        """Update prompt labels when a new trial begins."""
+        display_note = (
+            note.replace("â™¯", "#")
+            .replace("â™­", "b")
+            .replace("♯", "#")
+            .replace("♭", "b")
+        )
+        self._show_prompt_mode()
         self.string_label.setText(f"{string} string")
         self.low_high_label.setText(low_high)
         self.note_label.setText(display_note)
+        self._set_trial_timer(self.current_trial_duration, 1.0)
         self.status.setText(f"Trial {trial_idx}/{total} in progress...")
+
+    def on_trial_timer(self, remaining_seconds: float, remaining_fraction: float):
+        self._set_trial_timer(remaining_seconds, remaining_fraction)
 
     def on_trial_result(self, is_correct: bool):
         # Fill marker green/red based on trial outcome.
@@ -551,37 +883,373 @@ class NoteTrainerWindow(QMainWindow):
                 f"background: {color}; border: 2px solid {color}; border-radius: 10px;"
             )
         self.trial_index += 1
+        self._set_trial_timer(0.0, 0.0)
 
     def on_game_complete(self, num_correct: int, trials_attempted: int, best_score: str, cancelled: bool):
+        """Display end-of-session summary and restore interactive controls."""
         if trials_attempted > 0:
-            self.string_label.setText("Session complete")
-            self.low_high_label.setText(f"{num_correct}/{trials_attempted} correct")
-            self.note_label.setText(best_score)
+            self._show_summary_mode(
+                "Session complete",
+                f"{num_correct}/{trials_attempted} correct",
+                best_score,
+            )
+        else:
+            self._show_summary_mode("Session complete", "No trials completed.", "")
+        self._set_trial_timer(0.0, 0.0)
         self.status.setText("Session cancelled." if cancelled else "Session complete.")
         self.set_busy(False)
 
     def on_game_error(self, message: str):
+        """Surface worker errors in the status area and unlock controls."""
+        self._set_trial_timer(0.0, 0.0)
         self.status.setText(f"Session failed: {message}")
         self.set_busy(False)
 
     def open_high_scores(self):
+        """Open the high-score history window."""
         self.hs = HighScoresWindow()
         self.hs.show()
 
     def open_missed_notes(self):
+        """Open the missed-notes chart window."""
         self.mn = MissedNotesWindow()
         self.mn.show()
 
     def closeEvent(self, event: QCloseEvent):
+        """Attempt graceful worker shutdown before closing the window."""
         if self.worker is not None and self.worker.isRunning():
             self.worker.request_cancel()
             self.worker.wait(3000)
         self.closed.emit()
         super().closeEvent(event)
 
+class FretboardGrid(QFrame):
+    """Render a 6x12 fretboard grid showing either notes or scale degrees."""
+    def __init__(self, scale_notes, degree_by_note, display_mode: str, fret_count: int):
+        """Capture scale data and render the requested fretboard mode."""
+        super().__init__()
+        self.scale_notes = set(scale_notes)
+        self.degree_by_note = degree_by_note
+        self.display_mode = display_mode  # "note" or "degree"
+        self.fret_count = fret_count
+        self._top_fret_labels = []
+        self._bottom_fret_labels = []
+        self._open_markers = []
+        self._note_markers = []
+        self._fret_cells = []
+        self._build_ui()
+
+    def _build_ui(self):
+        """Build fretboard cells, open-string labels, and highlighted markers."""
+        self.setObjectName("fretboardCard")
+        layout = QGridLayout(self)
+        self.grid_layout = layout
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setHorizontalSpacing(0)
+        layout.setVerticalSpacing(0)
+
+        title = QLabel("Note positions" if self.display_mode == "note" else "Scale degrees")
+        title.setObjectName("fretboardTitle")
+        self._grid_title = title
+        layout.addWidget(title, 0, 0, 1, self.fret_count + 1)
+
+        # Fret numbers row (1..N), with left-most column reserved for open strings.
+        for fret in range(1, self.fret_count + 1):
+            fret_label = QLabel(str(fret))
+            fret_label.setObjectName("fretNum")
+            fret_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(fret_label, 1, fret, 1, 1)
+            self._top_fret_labels.append(fret_label)
+
+        for row, open_note in enumerate(FRETBOARD_STRING_NOTES, start=2):
+            # Open-string marker at fret 0.
+            if open_note in self.scale_notes:
+                open_text = open_note if self.display_mode == "note" else self.degree_by_note[open_note]
+            else:
+                open_text = open_note
+
+            open_marker = QLabel(open_text)
+            if open_note in self.scale_notes:
+                open_marker.setObjectName("fretMarkerRoot" if self.degree_by_note.get(open_note) == "1" else "fretMarker")
+            else:
+                open_marker.setObjectName("openString")
+            open_marker.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(open_marker, row, 0, 1, 1)
+            self._open_markers.append(open_marker)
+
+            for fret in range(1, self.fret_count + 1):
+                note = note_at_fret(open_note, fret)
+
+                cell = QFrame()
+                cell.setObjectName("fretCell")
+                cell_layout = QVBoxLayout(cell)
+                cell_layout.setContentsMargins(0, 0, 0, 0)
+                cell_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self._fret_cells.append(cell)
+
+                if note in self.scale_notes:
+                    text = note if self.display_mode == "note" else self.degree_by_note[note]
+                    marker = QLabel(text)
+                    marker.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    marker.setObjectName("fretMarkerRoot" if self.degree_by_note[note] == "1" else "fretMarker")
+                    cell_layout.addWidget(marker)
+                    self._note_markers.append(marker)
+
+                layout.addWidget(cell, row, fret, 1, 1)
+
+        # Duplicate fret numbers at the bottom for easier reading.
+        bottom_row = len(FRETBOARD_STRING_NOTES) + 2
+        for fret in range(1, self.fret_count + 1):
+            fret_label = QLabel(str(fret))
+            fret_label.setObjectName("fretNumBottom")
+            fret_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(fret_label, bottom_row, fret, 1, 1)
+            self._bottom_fret_labels.append(fret_label)
+
+        self._apply_responsive_sizes()
+
+    def resizeEvent(self, event):
+        """Resize fretboard cells/markers to fit current window dimensions."""
+        self._apply_responsive_sizes()
+        super().resizeEvent(event)
+
+    def _apply_responsive_sizes(self):
+        cols = self.fret_count + 1
+        available_width = max(280, self.width() - 40)
+        cell_w = max(14, min(56, int(available_width / cols)))
+        cell_h = max(18, int(cell_w * 0.88))
+        marker_size = max(8, min(cell_h - 4, cell_w - 4))
+
+        # Shrink fonts with width, but do not scale above baseline.
+        reference_width = 1160 if self.fret_count == 24 else 680
+        shrink_scale = min(1.0, available_width / reference_width)
+        marker_font = max(8, int(16 * shrink_scale))
+        fret_font = max(8, int(14 * shrink_scale))
+        title_font = max(14, int(28 * shrink_scale))
+
+        for lbl in self._top_fret_labels:
+            lbl.setFixedSize(cell_w, max(9, int(cell_h * 0.62)))
+            lbl.setFont(QFont("Segoe UI", fret_font, QFont.Weight.Medium))
+        for lbl in self._bottom_fret_labels:
+            lbl.setFixedSize(cell_w, max(9, int(cell_h * 0.62)))
+            lbl.setFont(QFont("Segoe UI", fret_font, QFont.Weight.Medium))
+        for cell in self._fret_cells:
+            cell.setFixedSize(cell_w, cell_h)
+        for marker in self._open_markers:
+            marker.setFixedSize(marker_size, marker_size)
+            marker.setFont(QFont("Segoe UI", marker_font, QFont.Weight.Bold))
+        for marker in self._note_markers:
+            marker.setFixedSize(marker_size, marker_size)
+            marker.setFont(QFont("Segoe UI", marker_font, QFont.Weight.Bold))
+
+        if hasattr(self, "_grid_title") and self._grid_title is not None:
+            self._grid_title.setFont(QFont("Segoe UI", title_font, QFont.Weight.DemiBold))
+
+
+class ScaleFretboardWindow(QMainWindow):
+    """Show stacked fretboard diagrams for notes and corresponding degrees."""
+    closed = Signal(str)
+
+    def __init__(self, scale_name: str, scale_notes, degree_labels, fret_count: int, display_mode: str):
+        """Create a titled fretboard window from a normalised note sequence."""
+        super().__init__()
+        self.scale_name = scale_name
+        self.scale_notes = scale_notes
+        self.degree_labels = degree_labels
+        self.degree_by_note = {note: degree_labels[i] for i, note in enumerate(self.scale_notes)}
+        self.fret_count = fret_count
+        self.display_mode = display_mode  # "Notes", "Degrees", "Note positions & Scale degrees"
+        self.setWindowTitle(f"Scale Fretboard: {self.scale_name}")
+        self.resize(1260, 760)
+        self.setMinimumSize(630, 380)
+        self._build_ui()
+
+    def _build_ui(self):
+        """Compose the title, note summary, and two fretboard diagrams."""
+        outer_root = QWidget()
+        self.setCentralWidget(outer_root)
+        outer_layout = QVBoxLayout(outer_root)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        outer_layout.addWidget(scroll)
+
+        root = QWidget()
+        root.setObjectName("scaleRoot")
+        scroll.setWidget(root)
+
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        title = QLabel(self.scale_name)
+        title.setObjectName("scaleTitle")
+        layout.addWidget(title)
+
+        meta_grid = QGridLayout()
+        meta_grid.setHorizontalSpacing(8)
+        meta_grid.setVerticalSpacing(6)
+        notes_title = QLabel("Notes of the scale:")
+        notes_title.setObjectName("scaleMetaTitle")
+        degrees_title = QLabel("Degrees formula:")
+        degrees_title.setObjectName("scaleMetaTitle")
+        meta_grid.addWidget(notes_title, 0, 0)
+        meta_grid.addWidget(degrees_title, 1, 0)
+        for i, note in enumerate(self.scale_notes):
+            note_chip = QLabel(note)
+            note_chip.setObjectName("scaleNoteChip")
+            note_chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            degree_chip = QLabel(self.degree_labels[i])
+            degree_chip.setObjectName("scaleDegreeChip")
+            degree_chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            meta_grid.addWidget(note_chip, 0, i + 1)
+            meta_grid.addWidget(degree_chip, 1, i + 1)
+        meta_grid.setColumnStretch(len(self.scale_notes) + 1, 1)
+        layout.addLayout(meta_grid)
+
+        notes_grid = FretboardGrid(self.scale_notes, self.degree_by_note, "note", self.fret_count)
+        degrees_grid = FretboardGrid(self.scale_notes, self.degree_by_note, "degree", self.fret_count)
+        if self.display_mode in ("Notes", "Note positions & Scale degrees"):
+            layout.addWidget(notes_grid)
+        if self.display_mode in ("Degrees", "Note positions & Scale degrees"):
+            layout.addWidget(degrees_grid)
+
+    def closeEvent(self, event: QCloseEvent):
+        """Notify parent workbench when this fretboard window is closed."""
+        self.closed.emit(self.scale_name)
+        super().closeEvent(event)
+
+
+class ScaleWorkbenchWindow(QMainWindow):
+    """PoC workbench for entering custom scales and opening diagram windows."""
+    def __init__(self):
+        """Initialise controls used to define and open scale fretboards."""
+        super().__init__()
+        self.setWindowTitle("Scale Notation to Fretboard (PoC)")
+        self.resize(820, 360)
+        self.fretboard_windows = []
+        self._build_ui()
+
+    def _build_ui(self):
+        """Build input form and launch action for fretboard windows."""
+        root = QWidget()
+        self.setCentralWidget(root)
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("Scale Notation to Fretboard")
+        title.setFont(QFont("Segoe UI", 24, QFont.Weight.DemiBold))
+        layout.addWidget(title)
+
+        subtitle = QLabel(
+            "Enter scale notes as a comma-separated list (e.g. A, B, C, D, E, F, G). "
+            "Each click opens a separate fretboard window."
+        )
+        subtitle.setObjectName("muted")
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
+
+        form = QGridLayout()
+        form.addWidget(QLabel("Scale name"), 0, 0)
+        self.scale_name_input = QLineEdit("A Natural Minor")
+        form.addWidget(self.scale_name_input, 0, 1)
+
+        form.addWidget(QLabel("Scale notes"), 1, 0)
+        self.scale_notes_input = QLineEdit("A, B, C, D, E, F, G")
+        form.addWidget(self.scale_notes_input, 1, 1)
+
+        form.addWidget(QLabel("Degrees formula"), 2, 0)
+        self.degree_input = QLineEdit("1, 2, b3, 4, 5, b6, b7")
+        form.addWidget(self.degree_input, 2, 1)
+
+        form.addWidget(QLabel("Fret range"), 3, 0)
+        self.fret_count_input = QComboBox()
+        self.fret_count_input.addItems(["12", "24"])
+        self.fret_count_input.setCurrentText("24")
+        form.addWidget(self.fret_count_input, 3, 1)
+
+        form.addWidget(QLabel("Display"), 4, 0)
+        self.display_mode_input = QComboBox()
+        self.display_mode_input.addItems(
+            ["Note positions & Scale degrees", "Note positions", "Scale degrees"]
+        )
+        self.display_mode_input.setCurrentText("Note positions & Scale degrees")
+        form.addWidget(self.display_mode_input, 4, 1)
+        layout.addLayout(form)
+
+        actions = QHBoxLayout()
+        self.open_btn = QPushButton("Open Fretboard Window")
+        self.open_btn.clicked.connect(self.open_fretboard_window)
+        actions.addWidget(self.open_btn)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        self.status = QLabel("Ready.")
+        self.status.setObjectName("muted")
+        layout.addWidget(self.status)
+
+    def open_fretboard_window(self):
+        """Parse/validate input notes and open a new independent fretboard view."""
+        raw_notes = [part.strip() for part in self.scale_notes_input.text().split(",") if part.strip()]
+        if not raw_notes:
+            self.status.setText("Enter at least one note.")
+            return
+
+        normalised = []
+        for item in raw_notes:
+            n = normalise_note_name(item)
+            if n is None:
+                self.status.setText(f"Invalid note: {item}")
+                return
+            if n not in normalised:
+                normalised.append(n)
+
+        if not normalised:
+            self.status.setText("No valid notes were provided.")
+            return
+
+        degree_raw = [part.strip() for part in self.degree_input.text().split(",") if part.strip()]
+        if degree_raw and len(degree_raw) != len(normalised):
+            self.status.setText("Degrees formula count must match the number of notes.")
+            return
+        degree_labels = degree_raw if degree_raw else [str(i + 1) for i in range(len(normalised))]
+
+        name = self.scale_name_input.text().strip() or "Custom Scale"
+        fret_count = int(self.fret_count_input.currentText())
+        display_choice = self.display_mode_input.currentText()
+        display_mode = "Note positions & Scale degrees"
+        if display_choice == "Note positions":
+            display_mode = "Notes"
+        elif display_choice == "Scale degrees":
+            display_mode = "Degrees"
+        window = ScaleFretboardWindow(name, normalised, degree_labels, fret_count, display_mode)
+        window.closed.connect(self.on_fretboard_closed)
+        window.show()
+        self.fretboard_windows.append(window)
+        self.status.setText(f"Fretboard windows open: {len(self.fretboard_windows)}")
+
+    def on_fretboard_closed(self, scale_name: str):
+        """Track only live fretboard windows and clear status when none remain."""
+        closed_window = self.sender()
+        if closed_window in self.fretboard_windows:
+            self.fretboard_windows.remove(closed_window)
+        self.fretboard_windows = [w for w in self.fretboard_windows if w is not None and w.isVisible()]
+        if self.fretboard_windows:
+            self.status.setText(f"Fretboard windows open: {len(self.fretboard_windows)}")
+        else:
+            self.status.setText("")
+
 
 class MainWindow(QMainWindow):
+    """Application landing window with mode launchers and device selection."""
     def __init__(self):
+        """Initialise app-level windows, then build and populate the main view."""
         super().__init__()
         self.setWindowTitle("Guitar Trainer")
         self.resize(1080, 720)
@@ -589,6 +1257,8 @@ class MainWindow(QMainWindow):
         self.device_lister = DeviceLister()
         self.tuner_window = None
         self.note_window = None
+        self.scale_window = None
+        self.calibration_window = None
         self._build_ui()
         self.refresh_devices()
 
@@ -621,6 +1291,7 @@ class MainWindow(QMainWindow):
         dlay.setColumnStretch(0, 1)
         dlay.setColumnStretch(1, 0)
         dlay.setColumnStretch(2, 0)
+        dlay.setColumnStretch(3, 0)
 
         self.refresh_btn = QPushButton("Refresh")
         self.refresh_btn.clicked.connect(self.refresh_devices)
@@ -632,19 +1303,27 @@ class MainWindow(QMainWindow):
         self.use_btn.setFixedWidth(160)
         dlay.addWidget(self.use_btn, 1, 2)
 
+        self.calibrate_btn = QPushButton("Input Calibration")
+        self.calibrate_btn.clicked.connect(self.open_input_calibration)
+        self.calibrate_btn.setFixedWidth(180)
+        dlay.addWidget(self.calibrate_btn, 1, 3)
+
         self.device_info = QLabel("Scanning devices...")
         self.device_info.setObjectName("muted")
-        dlay.addWidget(self.device_info, 2, 0, 1, 3)
+        dlay.addWidget(self.device_info, 2, 0, 1, 4)
 
         mode_row = QHBoxLayout()
         self.tuner_btn = QPushButton("Open Tuner")
         self.tuner_btn.clicked.connect(self.open_tuner)
         self.trainer_btn = QPushButton("Open Note Trainer")
         self.trainer_btn.clicked.connect(self.open_note_trainer)
+        self.scale_btn = QPushButton("Scale Fretboard (PoC)")
+        self.scale_btn.clicked.connect(self.open_scale_mapper)
         self.quit_btn = QPushButton("Quit")
         self.quit_btn.clicked.connect(self.close)
         mode_row.addWidget(self.tuner_btn)
         mode_row.addWidget(self.trainer_btn)
+        mode_row.addWidget(self.scale_btn)
         mode_row.addStretch(1)
         mode_row.addWidget(self.quit_btn)
         layout.addLayout(mode_row)
@@ -655,6 +1334,7 @@ class MainWindow(QMainWindow):
         layout.addStretch(1)
 
     def refresh_devices(self):
+        """Reload available audio input devices and update control availability."""
         devices = self.device_lister.show_devices("input")
         self.device_combo.clear()
         self.device_combo.addItems(devices)
@@ -667,6 +1347,8 @@ class MainWindow(QMainWindow):
         self.use_btn.setEnabled(has_devices)
         self.tuner_btn.setEnabled(has_devices)
         self.trainer_btn.setEnabled(has_devices)
+        self.calibrate_btn.setEnabled(has_devices)
+        self.scale_btn.setEnabled(True)
 
         if has_devices:
             self.device_combo.setCurrentIndex(0)
@@ -677,12 +1359,14 @@ class MainWindow(QMainWindow):
             self.status.setText("Connect an audio input and refresh.")
 
     def selected_device_id(self):
+        """Parse and validate the selected input-device identifier."""
         text = self.device_combo.currentText().strip()
         if not text.startswith("Input Device "):
             raise ValueError("No valid input device selected.")
         return parse_device_id(text)
 
     def confirm_device(self):
+        """Persist user intent by showing the currently selected device in status."""
         try:
             did = self.selected_device_id()
             self.status.setText(f"Input Device {did} selected.")
@@ -690,6 +1374,7 @@ class MainWindow(QMainWindow):
             self.status.setText("Please choose a valid input device.")
 
     def open_tuner(self):
+        """Open the tuner window for the currently selected input device."""
         try:
             did = self.selected_device_id()
         except ValueError:
@@ -701,6 +1386,7 @@ class MainWindow(QMainWindow):
         self.hide()
 
     def open_note_trainer(self):
+        """Open the note-trainer window for the currently selected input device."""
         try:
             did = self.selected_device_id()
         except ValueError:
@@ -710,6 +1396,32 @@ class MainWindow(QMainWindow):
         self.note_window.closed.connect(self.show)
         self.note_window.show()
         self.hide()
+
+    def open_scale_mapper(self):
+        """Open the scale-to-fretboard PoC workbench window."""
+        self.scale_window = ScaleWorkbenchWindow()
+        self.scale_window.show()
+
+    def open_input_calibration(self):
+        """Open the calibration window for the currently selected input device."""
+        try:
+            did = self.selected_device_id()
+        except ValueError:
+            QMessageBox.warning(self, "No device", "Select a valid input device first.")
+            return
+
+        if self.calibration_window is not None and self.calibration_window.isVisible():
+            self.calibration_window.raise_()
+            self.calibration_window.activateWindow()
+            return
+
+        threshold = load_calibration_settings().get("input_rms_threshold", DEFAULT_INPUT_RMS_THRESHOLD)
+        self.calibration_window = CalibrationWindow(did, threshold)
+        self.calibration_window.threshold_saved.connect(self.on_calibration_saved)
+        self.calibration_window.show()
+
+    def on_calibration_saved(self, threshold_rms: float):
+        self.status.setText(f"Calibration saved: {rms_to_db(threshold_rms):.1f} dBFS.")
 
 
 def build_app() -> QApplication:
@@ -744,6 +1456,11 @@ def build_app() -> QApplication:
             font-size: 48px;
             font-weight: 700;
         }
+        QLabel#trainerSummary {
+            font-size: 44px;
+            font-weight: 700;
+            color: #e6edf3;
+        }
         QLabel#tunerFrequency {
             color: #9cb0c6;
             font-size: 30px;
@@ -752,6 +1469,111 @@ def build_app() -> QApplication:
         QLabel#tunerCents {
             font-size: 38px;
             font-weight: 700;
+        }
+        QLabel#scaleTitle {
+            font-size: 42px;
+            font-weight: 700;
+        }
+        QWidget#scaleRoot {
+            background: #12161d;
+        }
+        QLabel#scaleMetaTitle {
+            color: #c9d9ea;
+            font-size: 30px;
+            font-weight: 600;
+            padding-right: 8px;
+        }
+        QLabel#scaleNoteChip {
+            min-width: 34px;
+            max-width: 34px;
+            min-height: 34px;
+            max-height: 34px;
+            border-radius: 6px;
+            background: #202b39;
+            border: 1px solid #3b4f67;
+            color: #eaf3ff;
+            font-size: 17px;
+            font-weight: 700;
+        }
+        QLabel#scaleDegreeChip {
+            min-width: 34px;
+            max-width: 34px;
+            min-height: 24px;
+            max-height: 24px;
+            color: #d6e3f1;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        QLabel#fretboardTitle {
+            font-size: 28px;
+            font-weight: 700;
+            color: #dbe8f4;
+            padding-bottom: 4px;
+        }
+        QLabel#fretNum {
+            color: #9cb0c6;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        QLabel#fretNumBottom {
+            color: #9cb0c6;
+            font-size: 15px;
+            font-weight: 600;
+            padding-top: 6px;
+        }
+        QLabel#openString {
+            border-radius: 20px;
+            background: #8192b0;
+            color: #eef5ff;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        QLabel#openStringInScale {
+            min-width: 40px;
+            max-width: 40px;
+            min-height: 40px;
+            max-height: 40px;
+            border-radius: 20px;
+            background: #2f4b86;
+            color: #f6fbff;
+            font-size: 18px;
+            font-weight: 800;
+        }
+        QLabel#openStringRoot {
+            min-width: 40px;
+            max-width: 40px;
+            min-height: 40px;
+            max-height: 40px;
+            border-radius: 6px;
+            background: #2f4b86;
+            color: #f6fbff;
+            font-size: 18px;
+            font-weight: 800;
+        }
+        QFrame#fretboardCard {
+            background: #1b2430;
+            border: 1px solid #2d3b4d;
+            border-radius: 10px;
+        }
+        QFrame#fretCell {
+            border-right: 1px solid #41526a;
+            border-bottom: 1px solid #41526a;
+            background: transparent;
+        }
+        QLabel#fretMarker {
+            border-radius: 17px;
+            background: transparent;
+            border: 2px solid #d17a23;
+            color: #f2f7ff;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        QLabel#fretMarkerRoot {
+            border-radius: 6px;
+            background: #2f4b86;
+            color: #f6fbff;
+            font-size: 16px;
+            font-weight: 800;
         }
         QLabel#tuneHint {
             color: #8b9db0;
@@ -781,6 +1603,22 @@ def build_app() -> QApplication:
             font-weight: 800;
             letter-spacing: 0.5px;
         }
+        QLabel#calibrationDetectOff {
+            color: #9cb0c6;
+            background: #243142;
+            border: 1px solid #384c64;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-weight: 700;
+        }
+        QLabel#calibrationDetectOn {
+            color: #0f2318;
+            background: #37c978;
+            border: 1px solid #37c978;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-weight: 800;
+        }
         QPushButton {
             background: #2f81f7;
             color: #ffffff;
@@ -796,12 +1634,60 @@ def build_app() -> QApplication:
         QPushButton:hover:!disabled {
             background: #1f6feb;
         }
+        QCheckBox {
+            background: transparent;
+            color: #e6edf3;
+            spacing: 8px;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        QCheckBox::indicator {
+            width: 18px;
+            height: 18px;
+            border: 1px solid #5f7792;
+            border-radius: 4px;
+            background: #0f141b;
+        }
+        QCheckBox::indicator:checked {
+            background: #2f81f7;
+            border: 1px solid #2f81f7;
+        }
+        QCheckBox#sessionOptionCheck {
+            font-size: 16px;
+            font-weight: 600;
+        }
         QComboBox, QSpinBox, QTableWidget {
             background: #0f141b;
             border: 1px solid #355070;
             border-radius: 6px;
             padding: 4px 6px;
             color: #e6edf3;
+        }
+        QSpinBox {
+            padding-right: 26px;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        QSpinBox::up-button, QSpinBox::down-button {
+            width: 18px;
+            border-left: 1px solid #355070;
+            background: #2b3e54;
+        }
+        QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+            background: #355070;
+        }
+        QSpinBox::up-arrow {
+            image: url(images/tuner_images/arrowUp.png);
+            width: 10px;
+            height: 10px;
+        }
+        QSpinBox::down-arrow {
+            image: url(images/tuner_images/arrowDown.png);
+            width: 10px;
+            height: 10px;
+        }
+        QSpinBox#calibrationThresholdSpin, QSpinBox#sessionSpin {
+            min-width: 94px;
         }
         QSpinBox#topNSpin {
             padding-right: 26px;
@@ -847,6 +1733,12 @@ def build_app() -> QApplication:
             background: #ffb347;
             border-radius: 7px;
         }
+        QProgressBar#trialTimerBar::chunk {
+            background: #2f81f7;
+            border-radius: 7px;
+        }
         """
     )
     return app
+
+
