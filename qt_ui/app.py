@@ -1,10 +1,14 @@
+import math
 import threading
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+import numpy as np
+import pyaudio
 from PySide6.QtCore import QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QFont, QFontMetrics
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QFrame,
     QGridLayout,
@@ -23,6 +27,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from functions.calibration_settings import (
+    DEFAULT_INPUT_RMS_THRESHOLD,
+    load_calibration_settings,
+    save_calibration_settings,
+)
 from functions.get_device_list import DeviceLister
 from functions.note_trainer import NoteTrainer
 from functions.sql_funcs import (
@@ -66,21 +75,46 @@ def note_at_fret(open_note: str, fret: int):
     return CHROMATIC_SHARPS[(idx + fret) % 12]
 
 
+def rms_to_db(rms: float) -> float:
+    """Convert RMS amplitude to dBFS for calibration display."""
+    return 20.0 * math.log10(max(float(rms), 1e-8))
+
+
+def db_to_rms(db: float) -> float:
+    """Convert dBFS threshold to RMS amplitude used by detection logic."""
+    return float(10 ** (float(db) / 20.0))
+
+
 # Background worker for note-trainer gameplay so the UI thread stays responsive.
 class NoteTrainerWorker(QThread):
     """Run note-trainer gameplay off the UI thread and emit progress events."""
     trial_start = Signal(str, str, str, int, int)  # string, low_high, note, trial_idx, total
+    trial_timer = Signal(float, float)  # remaining_seconds, remaining_fraction
     trial_result = Signal(bool)
     game_complete = Signal(int, int, str, bool)  # num_correct, trials_attempted, best_score, cancelled
     game_error = Signal(str)
 
-    def __init__(self, input_device: int, time_per_guess: int, total_trials: int):
+    def __init__(
+        self,
+        input_device: int,
+        time_per_guess: int,
+        total_trials: int,
+        input_rms_threshold: float,
+        end_on_correct: bool,
+        end_on_incorrect: bool,
+    ):
         """Store game configuration and initialise a cancellation event."""
         super().__init__()
         self.input_device = input_device
         self.time_per_guess = time_per_guess
         self.total_trials = total_trials
+        self.input_rms_threshold = input_rms_threshold
+        self.end_on_correct = end_on_correct
+        self.end_on_incorrect = end_on_incorrect
         self.cancel_event = threading.Event()
+
+    def _emit_timer(self, remaining_seconds: float, remaining_fraction: float):
+        self.trial_timer.emit(remaining_seconds, remaining_fraction)
 
     def request_cancel(self):
         """Signal the worker loop to stop after the current safe checkpoint."""
@@ -88,7 +122,10 @@ class NoteTrainerWorker(QThread):
 
     def run(self):
         """Execute the trial loop and persist per-trial/final score data."""
-        trainer = NoteTrainer(self.input_device)
+        trainer = NoteTrainer(
+            self.input_device,
+            input_rms_threshold=self.input_rms_threshold,
+        )
         num_correct = 0
         trials_attempted = 0
         game_id = get_current_game_id()
@@ -112,6 +149,9 @@ class NoteTrainerWorker(QThread):
                     low_high=target["low_high"],
                     note=target["note"],
                     stop_event=self.cancel_event,
+                    end_on_correct=self.end_on_correct,
+                    end_on_incorrect=self.end_on_incorrect,
+                    countdown_callback=self._emit_timer,
                 )
                 if result.get("cancelled"):
                     break
@@ -143,6 +183,166 @@ class NoteTrainerWorker(QThread):
             self.game_complete.emit(num_correct, trials_attempted, best, self.cancel_event.is_set())
         except Exception as exc:
             self.game_error.emit(str(exc))
+
+
+class CalibrationWorker(QThread):
+    """Continuously sample input RMS level and emit threshold detection state."""
+    level_sample = Signal(float, bool)  # rms_value, input_detected
+    worker_error = Signal(str)
+
+    def __init__(self, input_device: int, input_rms_threshold: float):
+        super().__init__()
+        self.input_device = input_device
+        self.input_rms_threshold = max(0.0, float(input_rms_threshold))
+        self.stop_event = threading.Event()
+
+    def update_threshold(self, input_rms_threshold: float):
+        self.input_rms_threshold = max(0.0, float(input_rms_threshold))
+
+    def request_stop(self):
+        self.stop_event.set()
+
+    def run(self):
+        p = pyaudio.PyAudio()
+        stream = None
+        try:
+            stream = p.open(
+                format=pyaudio.paFloat32,
+                channels=1,
+                rate=44100,
+                input=True,
+                frames_per_buffer=1024,
+                input_device_index=self.input_device,
+            )
+            while not self.stop_event.is_set():
+                audiobuffer = stream.read(1024, exception_on_overflow=False)
+                signal = np.frombuffer(audiobuffer, dtype=np.float32)
+                rms = float(np.sqrt(np.mean(np.square(signal)))) if signal.size else 0.0
+                self.level_sample.emit(rms, rms >= self.input_rms_threshold)
+        except Exception as exc:
+            self.worker_error.emit(str(exc))
+        finally:
+            if stream is not None:
+                stream.stop_stream()
+                stream.close()
+            p.terminate()
+
+
+class CalibrationWindow(QMainWindow):
+    """Calibrate input threshold against ambient noise and quiet note playing."""
+    threshold_saved = Signal(float)
+
+    def __init__(self, input_device: int, input_rms_threshold: float):
+        super().__init__()
+        self.setWindowTitle("Note Trainer: Input Calibration")
+        self.resize(760, 420)
+        self.input_device = input_device
+        self.input_rms_threshold = max(0.0, float(input_rms_threshold))
+        self.worker = None
+        self._build_ui()
+        self._start_worker()
+
+    def _build_ui(self):
+        root = QWidget()
+        self.setCentralWidget(root)
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("Input Calibration")
+        title.setFont(QFont("Segoe UI", 22, QFont.Weight.DemiBold))
+        layout.addWidget(title)
+
+        instructions = QLabel(
+            "1) Keep quiet and ensure detection stays off.\n"
+            "2) Play the quietest note that should count as input.\n"
+            "3) Raise/lower threshold until detection behaves as expected."
+        )
+        instructions.setObjectName("muted")
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+
+        card = QFrame()
+        card.setObjectName("card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(14, 14, 14, 14)
+        card_layout.setSpacing(10)
+        layout.addWidget(card)
+
+        threshold_row = QHBoxLayout()
+        threshold_row.addWidget(QLabel("Detection threshold (dBFS)"))
+        self.threshold_spin = QSpinBox()
+        self.threshold_spin.setObjectName("calibrationThresholdSpin")
+        self.threshold_spin.setRange(-80, -20)
+        initial_threshold_db = int(round(rms_to_db(self.input_rms_threshold)))
+        self.threshold_spin.setValue(max(-80, min(-20, initial_threshold_db)))
+        self.threshold_spin.setMinimumWidth(110)
+        self.input_rms_threshold = db_to_rms(float(self.threshold_spin.value()))
+        self.threshold_spin.valueChanged.connect(self.on_threshold_changed)
+        threshold_row.addWidget(self.threshold_spin)
+        threshold_row.addStretch(1)
+        card_layout.addLayout(threshold_row)
+
+        self.level_label = QLabel("Current level: -- dBFS")
+        self.level_label.setObjectName("muted")
+        card_layout.addWidget(self.level_label)
+
+        self.level_bar = QProgressBar()
+        self.level_bar.setRange(0, 100)
+        self.level_bar.setValue(0)
+        self.level_bar.setTextVisible(False)
+        card_layout.addWidget(self.level_bar)
+
+        self.detect_label = QLabel("NO INPUT DETECTED")
+        self.detect_label.setObjectName("calibrationDetectOff")
+        self.detect_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        card_layout.addWidget(self.detect_label)
+
+        actions = QHBoxLayout()
+        self.save_btn = QPushButton("Save Threshold")
+        self.save_btn.clicked.connect(self.save_threshold)
+        actions.addWidget(self.save_btn)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        self.status = QLabel("Adjust threshold, then save.")
+        self.status.setObjectName("muted")
+        layout.addWidget(self.status)
+
+    def _start_worker(self):
+        self.worker = CalibrationWorker(self.input_device, self.input_rms_threshold)
+        self.worker.level_sample.connect(self.on_level_sample)
+        self.worker.worker_error.connect(self.on_worker_error)
+        self.worker.start()
+
+    def on_threshold_changed(self, threshold_db: int):
+        self.input_rms_threshold = db_to_rms(float(threshold_db))
+        if self.worker is not None and self.worker.isRunning():
+            self.worker.update_threshold(self.input_rms_threshold)
+
+    def on_level_sample(self, rms: float, detected: bool):
+        dbfs = rms_to_db(rms)
+        normalised = int(max(0, min(100, ((dbfs + 80.0) / 60.0) * 100.0)))
+        self.level_label.setText(f"Current level: {dbfs:.1f} dBFS")
+        self.level_bar.setValue(normalised)
+        self.detect_label.setText("INPUT DETECTED" if detected else "NO INPUT DETECTED")
+        self.detect_label.setObjectName("calibrationDetectOn" if detected else "calibrationDetectOff")
+        self.detect_label.style().unpolish(self.detect_label)
+        self.detect_label.style().polish(self.detect_label)
+
+    def on_worker_error(self, message: str):
+        self.status.setText(f"Calibration input failed: {message}")
+
+    def save_threshold(self):
+        save_calibration_settings(self.input_rms_threshold)
+        self.threshold_saved.emit(self.input_rms_threshold)
+        self.status.setText("Threshold saved.")
+
+    def closeEvent(self, event: QCloseEvent):
+        if self.worker is not None and self.worker.isRunning():
+            self.worker.request_stop()
+            self.worker.wait(1500)
+        super().closeEvent(event)
 
 
 class TunerWindow(QMainWindow):
@@ -427,9 +627,12 @@ class NoteTrainerWindow(QMainWindow):
         self.setWindowTitle("Guitar Trainer: Note Trainer")
         self.resize(1080, 720)
         self.input_device = input_device
+        calibration = load_calibration_settings()
+        self.input_rms_threshold = calibration.get("input_rms_threshold", DEFAULT_INPUT_RMS_THRESHOLD)
         self.worker = None
         self.progress_markers = []
         self.trial_index = 0
+        self.current_trial_duration = 0.0
         self._build_ui()
 
     def _build_ui(self):
@@ -458,8 +661,10 @@ class NoteTrainerWindow(QMainWindow):
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Time per trial (seconds)"))
         self.time_per_guess = QSpinBox()
+        self.time_per_guess.setObjectName("sessionSpin")
         self.time_per_guess.setRange(1, 30)
         self.time_per_guess.setValue(1)
+        self.time_per_guess.setMinimumWidth(94)
         row1.addWidget(self.time_per_guess)
         row1.addStretch(1)
         left_layout.addLayout(row1)
@@ -467,11 +672,23 @@ class NoteTrainerWindow(QMainWindow):
         row2 = QHBoxLayout()
         row2.addWidget(QLabel("Total trials"))
         self.total_trials = QSpinBox()
+        self.total_trials.setObjectName("sessionSpin")
         self.total_trials.setRange(1, 100)
         self.total_trials.setValue(10)
+        self.total_trials.setMinimumWidth(94)
         row2.addWidget(self.total_trials)
         row2.addStretch(1)
         left_layout.addLayout(row2)
+
+        self.end_on_correct_toggle = QCheckBox("End trial early when correct note is detected")
+        self.end_on_correct_toggle.setObjectName("sessionOptionCheck")
+        self.end_on_correct_toggle.setChecked(False)
+        left_layout.addWidget(self.end_on_correct_toggle)
+
+        self.end_on_incorrect_toggle = QCheckBox("End trial early when incorrect note is detected")
+        self.end_on_incorrect_toggle.setObjectName("sessionOptionCheck")
+        self.end_on_incorrect_toggle.setChecked(False)
+        left_layout.addWidget(self.end_on_incorrect_toggle)
 
         self.start_btn = QPushButton("Start Session")
         self.start_btn.clicked.connect(self.start_session)
@@ -491,7 +708,9 @@ class NoteTrainerWindow(QMainWindow):
         stats_row.addWidget(self.missed_btn)
         left_layout.addLayout(stats_row)
 
-        self.status = QLabel("Configure your session and press Start Session.")
+        self.status = QLabel(
+            f"Configure your session and press Start Session. Threshold: {rms_to_db(self.input_rms_threshold):.1f} dBFS."
+        )
         self.status.setObjectName("muted")
         left_layout.addWidget(self.status)
         left_layout.addStretch(1)
@@ -503,6 +722,18 @@ class NoteTrainerWindow(QMainWindow):
         right_layout.setSpacing(14)
         layout.addWidget(right, 1, 1)
 
+        self.timer_label = QLabel("Time remaining: --")
+        self.timer_label.setObjectName("muted")
+        right_layout.addWidget(self.timer_label)
+
+        self.timer_bar = QProgressBar()
+        self.timer_bar.setObjectName("trialTimerBar")
+        self.timer_bar.setRange(0, 1000)
+        self.timer_bar.setValue(0)
+        self.timer_bar.setTextVisible(False)
+        self.timer_bar.setFixedHeight(14)
+        right_layout.addWidget(self.timer_bar)
+
         prompt_row = QHBoxLayout()
         self.string_label = QLabel("String")
         self.string_label.setObjectName("trainerPrompt")
@@ -510,11 +741,23 @@ class NoteTrainerWindow(QMainWindow):
         self.low_high_label.setObjectName("trainerPrompt")
         self.note_label = QLabel("Note")
         self.note_label.setObjectName("trainerPrompt")
-        for w in (self.string_label, self.low_high_label, self.note_label):
+        self.prompt_labels = [self.string_label, self.low_high_label, self.note_label]
+        for w in self.prompt_labels:
             w.setFont(QFont("Segoe UI", 36, QFont.Weight.Bold))
             prompt_row.addWidget(w)
         prompt_row.addStretch(1)
         right_layout.addLayout(prompt_row)
+
+        summary_col = QVBoxLayout()
+        self.summary_label_1 = QLabel("")
+        self.summary_label_2 = QLabel("")
+        self.summary_label_3 = QLabel("")
+        self.summary_labels = [self.summary_label_1, self.summary_label_2, self.summary_label_3]
+        for lbl in self.summary_labels:
+            lbl.setObjectName("trainerSummary")
+            lbl.setVisible(False)
+            summary_col.addWidget(lbl)
+        right_layout.addLayout(summary_col)
 
         self.progress_row = QHBoxLayout()
         self.progress_row.setSpacing(8)
@@ -527,6 +770,8 @@ class NoteTrainerWindow(QMainWindow):
         self.cancel_btn.setEnabled(busy)
         self.high_btn.setEnabled(not busy)
         self.missed_btn.setEnabled(not busy)
+        self.end_on_correct_toggle.setEnabled(not busy)
+        self.end_on_incorrect_toggle.setEnabled(not busy)
         self.time_per_guess.setEnabled(not busy)
         self.total_trials.setEnabled(not busy)
 
@@ -553,6 +798,26 @@ class NoteTrainerWindow(QMainWindow):
             self.progress_markers.append(marker)
         self.progress_row.addStretch(1)
 
+    def _set_trial_timer(self, remaining_seconds: float, remaining_fraction: float):
+        clamped_fraction = max(0.0, min(1.0, float(remaining_fraction)))
+        self.timer_bar.setValue(int(clamped_fraction * 1000))
+        self.timer_label.setText(f"Time remaining: {max(0.0, float(remaining_seconds)):.1f}s")
+
+    def _show_prompt_mode(self):
+        for w in self.prompt_labels:
+            w.setVisible(True)
+        for w in self.summary_labels:
+            w.setVisible(False)
+
+    def _show_summary_mode(self, line1: str, line2: str, line3: str):
+        for w in self.prompt_labels:
+            w.setVisible(False)
+        lines = [line1, line2, line3]
+        for idx, w in enumerate(self.summary_labels):
+            text = lines[idx] if idx < len(lines) else ""
+            w.setText(text)
+            w.setVisible(bool(text))
+
     def start_session(self):
         """Create and start a worker thread for a new trainer session."""
         if self.worker is not None and self.worker.isRunning():
@@ -560,12 +825,25 @@ class NoteTrainerWindow(QMainWindow):
 
         time_per_guess = self.time_per_guess.value()
         total_trials = self.total_trials.value()
+        end_on_correct = self.end_on_correct_toggle.isChecked()
+        end_on_incorrect = self.end_on_incorrect_toggle.isChecked()
         self._setup_progress(total_trials)
+        self._show_prompt_mode()
         self.set_busy(True)
+        self.current_trial_duration = float(time_per_guess)
+        self._set_trial_timer(self.current_trial_duration, 1.0)
         self.status.setText("Session in progress...")
 
-        self.worker = NoteTrainerWorker(self.input_device, time_per_guess, total_trials)
+        self.worker = NoteTrainerWorker(
+            self.input_device,
+            time_per_guess,
+            total_trials,
+            self.input_rms_threshold,
+            end_on_correct,
+            end_on_incorrect,
+        )
         self.worker.trial_start.connect(self.on_trial_start)
+        self.worker.trial_timer.connect(self.on_trial_timer)
         self.worker.trial_result.connect(self.on_trial_result)
         self.worker.game_complete.connect(self.on_game_complete)
         self.worker.game_error.connect(self.on_game_error)
@@ -581,11 +859,21 @@ class NoteTrainerWindow(QMainWindow):
 
     def on_trial_start(self, string: str, low_high: str, note: str, trial_idx: int, total: int):
         """Update prompt labels when a new trial begins."""
-        display_note = note.replace("â™¯", "#").replace("â™­", "b").replace("♯", "#").replace("♭", "b")
+        display_note = (
+            note.replace("â™¯", "#")
+            .replace("â™­", "b")
+            .replace("♯", "#")
+            .replace("♭", "b")
+        )
+        self._show_prompt_mode()
         self.string_label.setText(f"{string} string")
         self.low_high_label.setText(low_high)
         self.note_label.setText(display_note)
+        self._set_trial_timer(self.current_trial_duration, 1.0)
         self.status.setText(f"Trial {trial_idx}/{total} in progress...")
+
+    def on_trial_timer(self, remaining_seconds: float, remaining_fraction: float):
+        self._set_trial_timer(remaining_seconds, remaining_fraction)
 
     def on_trial_result(self, is_correct: bool):
         # Fill marker green/red based on trial outcome.
@@ -595,18 +883,25 @@ class NoteTrainerWindow(QMainWindow):
                 f"background: {color}; border: 2px solid {color}; border-radius: 10px;"
             )
         self.trial_index += 1
+        self._set_trial_timer(0.0, 0.0)
 
     def on_game_complete(self, num_correct: int, trials_attempted: int, best_score: str, cancelled: bool):
         """Display end-of-session summary and restore interactive controls."""
         if trials_attempted > 0:
-            self.string_label.setText("Session complete")
-            self.low_high_label.setText(f"{num_correct}/{trials_attempted} correct")
-            self.note_label.setText(best_score)
+            self._show_summary_mode(
+                "Session complete",
+                f"{num_correct}/{trials_attempted} correct",
+                best_score,
+            )
+        else:
+            self._show_summary_mode("Session complete", "No trials completed.", "")
+        self._set_trial_timer(0.0, 0.0)
         self.status.setText("Session cancelled." if cancelled else "Session complete.")
         self.set_busy(False)
 
     def on_game_error(self, message: str):
         """Surface worker errors in the status area and unlock controls."""
+        self._set_trial_timer(0.0, 0.0)
         self.status.setText(f"Session failed: {message}")
         self.set_busy(False)
 
@@ -627,7 +922,6 @@ class NoteTrainerWindow(QMainWindow):
             self.worker.wait(3000)
         self.closed.emit()
         super().closeEvent(event)
-
 
 class FretboardGrid(QFrame):
     """Render a 6x12 fretboard grid showing either notes or scale degrees."""
@@ -654,7 +948,7 @@ class FretboardGrid(QFrame):
         layout.setHorizontalSpacing(0)
         layout.setVerticalSpacing(0)
 
-        title = QLabel("Note Positions" if self.display_mode == "note" else "Scale Degrees")
+        title = QLabel("Note positions" if self.display_mode == "note" else "Scale degrees")
         title.setObjectName("fretboardTitle")
         self._grid_title = title
         layout.addWidget(title, 0, 0, 1, self.fret_count + 1)
@@ -764,7 +1058,7 @@ class ScaleFretboardWindow(QMainWindow):
         self.degree_labels = degree_labels
         self.degree_by_note = {note: degree_labels[i] for i, note in enumerate(self.scale_notes)}
         self.fret_count = fret_count
-        self.display_mode = display_mode  # "Notes", "Degrees", "Both"
+        self.display_mode = display_mode  # "Notes", "Degrees", "Note positions & Scale degrees"
         self.setWindowTitle(f"Scale Fretboard: {self.scale_name}")
         self.resize(1260, 760)
         self.setMinimumSize(630, 380)
@@ -820,9 +1114,9 @@ class ScaleFretboardWindow(QMainWindow):
 
         notes_grid = FretboardGrid(self.scale_notes, self.degree_by_note, "note", self.fret_count)
         degrees_grid = FretboardGrid(self.scale_notes, self.degree_by_note, "degree", self.fret_count)
-        if self.display_mode in ("Notes", "Both"):
+        if self.display_mode in ("Notes", "Note positions & Scale degrees"):
             layout.addWidget(notes_grid)
-        if self.display_mode in ("Degrees", "Both"):
+        if self.display_mode in ("Degrees", "Note positions & Scale degrees"):
             layout.addWidget(degrees_grid)
 
     def closeEvent(self, event: QCloseEvent):
@@ -882,8 +1176,10 @@ class ScaleWorkbenchWindow(QMainWindow):
 
         form.addWidget(QLabel("Display"), 4, 0)
         self.display_mode_input = QComboBox()
-        self.display_mode_input.addItems(["Both", "Note Positions", "Scale Degrees"])
-        self.display_mode_input.setCurrentText("Both")
+        self.display_mode_input.addItems(
+            ["Note positions & Scale degrees", "Note positions", "Scale degrees"]
+        )
+        self.display_mode_input.setCurrentText("Note positions & Scale degrees")
         form.addWidget(self.display_mode_input, 4, 1)
         layout.addLayout(form)
 
@@ -927,10 +1223,10 @@ class ScaleWorkbenchWindow(QMainWindow):
         name = self.scale_name_input.text().strip() or "Custom Scale"
         fret_count = int(self.fret_count_input.currentText())
         display_choice = self.display_mode_input.currentText()
-        display_mode = "Both"
-        if display_choice == "Note Positions":
+        display_mode = "Note positions & Scale degrees"
+        if display_choice == "Note positions":
             display_mode = "Notes"
-        elif display_choice == "Scale Degrees":
+        elif display_choice == "Scale degrees":
             display_mode = "Degrees"
         window = ScaleFretboardWindow(name, normalised, degree_labels, fret_count, display_mode)
         window.closed.connect(self.on_fretboard_closed)
@@ -962,6 +1258,7 @@ class MainWindow(QMainWindow):
         self.tuner_window = None
         self.note_window = None
         self.scale_window = None
+        self.calibration_window = None
         self._build_ui()
         self.refresh_devices()
 
@@ -994,6 +1291,7 @@ class MainWindow(QMainWindow):
         dlay.setColumnStretch(0, 1)
         dlay.setColumnStretch(1, 0)
         dlay.setColumnStretch(2, 0)
+        dlay.setColumnStretch(3, 0)
 
         self.refresh_btn = QPushButton("Refresh")
         self.refresh_btn.clicked.connect(self.refresh_devices)
@@ -1005,9 +1303,14 @@ class MainWindow(QMainWindow):
         self.use_btn.setFixedWidth(160)
         dlay.addWidget(self.use_btn, 1, 2)
 
+        self.calibrate_btn = QPushButton("Input Calibration")
+        self.calibrate_btn.clicked.connect(self.open_input_calibration)
+        self.calibrate_btn.setFixedWidth(180)
+        dlay.addWidget(self.calibrate_btn, 1, 3)
+
         self.device_info = QLabel("Scanning devices...")
         self.device_info.setObjectName("muted")
-        dlay.addWidget(self.device_info, 2, 0, 1, 3)
+        dlay.addWidget(self.device_info, 2, 0, 1, 4)
 
         mode_row = QHBoxLayout()
         self.tuner_btn = QPushButton("Open Tuner")
@@ -1044,6 +1347,7 @@ class MainWindow(QMainWindow):
         self.use_btn.setEnabled(has_devices)
         self.tuner_btn.setEnabled(has_devices)
         self.trainer_btn.setEnabled(has_devices)
+        self.calibrate_btn.setEnabled(has_devices)
         self.scale_btn.setEnabled(True)
 
         if has_devices:
@@ -1098,6 +1402,27 @@ class MainWindow(QMainWindow):
         self.scale_window = ScaleWorkbenchWindow()
         self.scale_window.show()
 
+    def open_input_calibration(self):
+        """Open the calibration window for the currently selected input device."""
+        try:
+            did = self.selected_device_id()
+        except ValueError:
+            QMessageBox.warning(self, "No device", "Select a valid input device first.")
+            return
+
+        if self.calibration_window is not None and self.calibration_window.isVisible():
+            self.calibration_window.raise_()
+            self.calibration_window.activateWindow()
+            return
+
+        threshold = load_calibration_settings().get("input_rms_threshold", DEFAULT_INPUT_RMS_THRESHOLD)
+        self.calibration_window = CalibrationWindow(did, threshold)
+        self.calibration_window.threshold_saved.connect(self.on_calibration_saved)
+        self.calibration_window.show()
+
+    def on_calibration_saved(self, threshold_rms: float):
+        self.status.setText(f"Calibration saved: {rms_to_db(threshold_rms):.1f} dBFS.")
+
 
 def build_app() -> QApplication:
     # Global application theme. Update these style blocks to tune colors, typography, and control styling.
@@ -1130,6 +1455,11 @@ def build_app() -> QApplication:
         QLabel#trainerPrompt {
             font-size: 48px;
             font-weight: 700;
+        }
+        QLabel#trainerSummary {
+            font-size: 44px;
+            font-weight: 700;
+            color: #e6edf3;
         }
         QLabel#tunerFrequency {
             color: #9cb0c6;
@@ -1273,6 +1603,22 @@ def build_app() -> QApplication:
             font-weight: 800;
             letter-spacing: 0.5px;
         }
+        QLabel#calibrationDetectOff {
+            color: #9cb0c6;
+            background: #243142;
+            border: 1px solid #384c64;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-weight: 700;
+        }
+        QLabel#calibrationDetectOn {
+            color: #0f2318;
+            background: #37c978;
+            border: 1px solid #37c978;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-weight: 800;
+        }
         QPushButton {
             background: #2f81f7;
             color: #ffffff;
@@ -1288,12 +1634,60 @@ def build_app() -> QApplication:
         QPushButton:hover:!disabled {
             background: #1f6feb;
         }
+        QCheckBox {
+            background: transparent;
+            color: #e6edf3;
+            spacing: 8px;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        QCheckBox::indicator {
+            width: 18px;
+            height: 18px;
+            border: 1px solid #5f7792;
+            border-radius: 4px;
+            background: #0f141b;
+        }
+        QCheckBox::indicator:checked {
+            background: #2f81f7;
+            border: 1px solid #2f81f7;
+        }
+        QCheckBox#sessionOptionCheck {
+            font-size: 16px;
+            font-weight: 600;
+        }
         QComboBox, QSpinBox, QTableWidget {
             background: #0f141b;
             border: 1px solid #355070;
             border-radius: 6px;
             padding: 4px 6px;
             color: #e6edf3;
+        }
+        QSpinBox {
+            padding-right: 26px;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        QSpinBox::up-button, QSpinBox::down-button {
+            width: 18px;
+            border-left: 1px solid #355070;
+            background: #2b3e54;
+        }
+        QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+            background: #355070;
+        }
+        QSpinBox::up-arrow {
+            image: url(images/tuner_images/arrowUp.png);
+            width: 10px;
+            height: 10px;
+        }
+        QSpinBox::down-arrow {
+            image: url(images/tuner_images/arrowDown.png);
+            width: 10px;
+            height: 10px;
+        }
+        QSpinBox#calibrationThresholdSpin, QSpinBox#sessionSpin {
+            min-width: 94px;
         }
         QSpinBox#topNSpin {
             padding-right: 26px;
@@ -1339,6 +1733,12 @@ def build_app() -> QApplication:
             background: #ffb347;
             border-radius: 7px;
         }
+        QProgressBar#trialTimerBar::chunk {
+            background: #2f81f7;
+            border-radius: 7px;
+        }
         """
     )
     return app
+
+
