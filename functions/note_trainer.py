@@ -37,7 +37,6 @@ class NoteTrainer:
         record_duration=3,
         stop_event=None,
         expected_midi=None,
-        end_on_correct=False,
         end_on_incorrect=False,
         level_callback=None,
         countdown_callback=None,
@@ -101,7 +100,7 @@ class NoteTrainer:
                         if pitch == expected_midi:
                             correct_hits += 1
                             incorrect_hits = 0
-                            if end_on_correct and correct_hits >= required_hits:
+                            if correct_hits >= required_hits:
                                 early_end_reason = "correct"
                                 early_end_pitch = pitch
                                 break
@@ -159,7 +158,6 @@ class NoteTrainer:
         low_high=None,
         note=None,
         stop_event=None,
-        end_on_correct=False,
         end_on_incorrect=False,
         level_callback=None,
         countdown_callback=None,
@@ -187,8 +185,7 @@ class NoteTrainer:
         recording = self.record(
             record_duration=time_per_guess,
             stop_event=stop_event,
-            expected_midi=expected if (end_on_correct or end_on_incorrect) else None,
-            end_on_correct=end_on_correct,
+            expected_midi=expected,
             end_on_incorrect=end_on_incorrect,
             level_callback=level_callback,
             countdown_callback=countdown_callback,
@@ -247,9 +244,8 @@ class NoteTrainer:
                 "played_note": None,
             }
 
-        median_note = int(np.median(played_notes))
-
-        if median_note == expected:
+        final_note = int(played_notes[-1])
+        if final_note == expected:
             self._play("correct.mp3", stop_event=stop_event)
             print("Correct!")
             return {
@@ -262,7 +258,7 @@ class NoteTrainer:
             }
 
         self._play("incorrect.mp3", stop_event=stop_event)
-        incorrect_note = self.find_note(median_note)
+        incorrect_note = self.find_note(final_note)
         if incorrect_note is not None:
             self._play("you_played.mp3", stop_event=stop_event)
             self._play(f"{self._note_to_sound_name(incorrect_note)}.mp3", stop_event=stop_event)

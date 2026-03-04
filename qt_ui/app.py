@@ -100,7 +100,6 @@ class NoteTrainerWorker(QThread):
         time_per_guess: int,
         total_trials: int,
         input_rms_threshold: float,
-        end_on_correct: bool,
         end_on_incorrect: bool,
     ):
         """Store game configuration and initialise a cancellation event."""
@@ -109,7 +108,6 @@ class NoteTrainerWorker(QThread):
         self.time_per_guess = time_per_guess
         self.total_trials = total_trials
         self.input_rms_threshold = input_rms_threshold
-        self.end_on_correct = end_on_correct
         self.end_on_incorrect = end_on_incorrect
         self.cancel_event = threading.Event()
 
@@ -149,7 +147,6 @@ class NoteTrainerWorker(QThread):
                     low_high=target["low_high"],
                     note=target["note"],
                     stop_event=self.cancel_event,
-                    end_on_correct=self.end_on_correct,
                     end_on_incorrect=self.end_on_incorrect,
                     countdown_callback=self._emit_timer,
                 )
@@ -680,10 +677,9 @@ class NoteTrainerWindow(QMainWindow):
         row2.addStretch(1)
         left_layout.addLayout(row2)
 
-        self.end_on_correct_toggle = QCheckBox("End trial early when correct note is detected")
-        self.end_on_correct_toggle.setObjectName("sessionOptionCheck")
-        self.end_on_correct_toggle.setChecked(False)
-        left_layout.addWidget(self.end_on_correct_toggle)
+        auto_end_info = QLabel("Correct note ends the trial automatically.")
+        auto_end_info.setObjectName("muted")
+        left_layout.addWidget(auto_end_info)
 
         self.end_on_incorrect_toggle = QCheckBox("End trial early when incorrect note is detected")
         self.end_on_incorrect_toggle.setObjectName("sessionOptionCheck")
@@ -770,7 +766,6 @@ class NoteTrainerWindow(QMainWindow):
         self.cancel_btn.setEnabled(busy)
         self.high_btn.setEnabled(not busy)
         self.missed_btn.setEnabled(not busy)
-        self.end_on_correct_toggle.setEnabled(not busy)
         self.end_on_incorrect_toggle.setEnabled(not busy)
         self.time_per_guess.setEnabled(not busy)
         self.total_trials.setEnabled(not busy)
@@ -825,7 +820,6 @@ class NoteTrainerWindow(QMainWindow):
 
         time_per_guess = self.time_per_guess.value()
         total_trials = self.total_trials.value()
-        end_on_correct = self.end_on_correct_toggle.isChecked()
         end_on_incorrect = self.end_on_incorrect_toggle.isChecked()
         self._setup_progress(total_trials)
         self._show_prompt_mode()
@@ -839,7 +833,6 @@ class NoteTrainerWindow(QMainWindow):
             time_per_guess,
             total_trials,
             self.input_rms_threshold,
-            end_on_correct,
             end_on_incorrect,
         )
         self.worker.trial_start.connect(self.on_trial_start)
