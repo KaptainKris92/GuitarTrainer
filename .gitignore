@@ -1,6 +1,4 @@
 /.spyproject
-/backups
-score_database
 .venv/
 
 # Python caches and compiled artefacts
@@ -14,3 +12,4 @@ Z_Codex_Diffs/
 
 # Local databases
 databases/
+backups/
