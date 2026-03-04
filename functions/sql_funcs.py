@@ -1,6 +1,5 @@
 # Database
 import datetime
-import os.path
 import sqlite3
 from pathlib import Path
 
@@ -11,6 +10,7 @@ DATABASE_PATH = Path(__file__).resolve().parents[1] / "databases" / "score_datab
 
 def _connect():
     # Centralized sqlite connection settings used by all DB operations.
+    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     return sqlite3.connect(
         DATABASE_PATH,
         detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
@@ -184,5 +184,5 @@ def get_highscores(trials, time_per_guess):
         ).fetchall()
 
 
-if not os.path.isfile(DATABASE_PATH):
+if not DATABASE_PATH.exists():
     create_database()
