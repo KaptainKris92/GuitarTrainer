@@ -7,7 +7,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 import numpy as np
 import pyaudio
 from PySide6.QtCore import QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QCloseEvent, QFont, QFontMetrics
+from PySide6.QtGui import QCloseEvent, QFont, QFontMetrics, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -60,22 +60,28 @@ def load_scale_library():
     """Load and validate the external scale catalog used by the preset UI."""
     raw = json.loads(SCALE_LIBRARY_PATH.read_text(encoding="utf-8"))
     default_keys = raw.get("default_keys")
+    category_order = raw.get("category_order", [])
     scales = raw.get("scales")
 
     if not isinstance(default_keys, list) or not default_keys:
         raise RuntimeError(f"Invalid or missing default_keys in {SCALE_LIBRARY_PATH}")
+    if category_order and not isinstance(category_order, list):
+        raise RuntimeError(f"Invalid category_order in {SCALE_LIBRARY_PATH}")
     if not isinstance(scales, dict) or not scales:
         raise RuntimeError(f"Invalid or missing scales in {SCALE_LIBRARY_PATH}")
 
     for scale_name, definition in scales.items():
         intervals = definition.get("intervals")
         degree_labels = definition.get("degree_labels")
+        category = definition.get("category")
         if not isinstance(intervals, list) or not intervals:
             raise RuntimeError(f"Scale '{scale_name}' has no intervals in {SCALE_LIBRARY_PATH}")
         if not isinstance(degree_labels, list) or len(degree_labels) != len(intervals):
             raise RuntimeError(
                 f"Scale '{scale_name}' has mismatched degree labels in {SCALE_LIBRARY_PATH}"
             )
+        if not isinstance(category, str) or not category.strip():
+            raise RuntimeError(f"Scale '{scale_name}' is missing a category")
         if intervals != sorted(intervals):
             raise RuntimeError(f"Scale '{scale_name}' intervals must be sorted ascending")
         if any(not isinstance(interval, int) or interval < 0 or interval > 11 for interval in intervals):
@@ -88,10 +94,10 @@ def load_scale_library():
             raise RuntimeError(f"Scale '{scale_name}' has invalid key options")
         definition["keys"] = keys
 
-    return default_keys, scales
+    return default_keys, category_order, scales
 
 
-_DEFAULT_SCALE_KEYS, SCALE_DEFINITIONS = load_scale_library()
+_DEFAULT_SCALE_KEYS, SCALE_CATEGORY_ORDER, SCALE_DEFINITIONS = load_scale_library()
 
 
 # Convert the selected device combo text into the numeric device index.
@@ -1303,7 +1309,7 @@ class ScaleWorkbenchWindow(QMainWindow):
         self.fretboard_windows = []
         self.custom_scale_window = None
         self._build_ui()
-        self.on_scale_changed(self.scale_input.currentText())
+        self.on_scale_changed(self.scale_input.currentIndex())
 
     def _build_ui(self):
         """Build the preset picker, launch actions, and display options."""
@@ -1334,9 +1340,9 @@ class ScaleWorkbenchWindow(QMainWindow):
 
         picker_layout.addWidget(QLabel("Scale"), 0, 2)
         self.scale_input = QComboBox()
-        self.scale_input.addItems(list(SCALE_DEFINITIONS.keys()))
-        self.scale_input.setCurrentText("Natural Minor")
-        self.scale_input.currentTextChanged.connect(self.on_scale_changed)
+        self.scale_input.setMinimumWidth(240)
+        self.populate_scale_input("Natural Minor")
+        self.scale_input.currentIndexChanged.connect(self.on_scale_changed)
         picker_layout.addWidget(self.scale_input, 0, 3)
         layout.addLayout(picker_layout)
 
@@ -1376,11 +1382,57 @@ class ScaleWorkbenchWindow(QMainWindow):
         self.status.setObjectName("muted")
         layout.addWidget(self.status)
 
-    def on_scale_changed(self, scale_name: str):
+    def populate_scale_input(self, selected_scale: str):
+        """Populate the scale combo with category headers and grouped presets."""
+        grouped_scales = {}
+        for scale_name, definition in SCALE_DEFINITIONS.items():
+            category = definition["category"]
+            grouped_scales.setdefault(category, []).append(scale_name)
+
+        known_categories = set(SCALE_CATEGORY_ORDER)
+        ordered_categories = [category for category in SCALE_CATEGORY_ORDER if category in grouped_scales]
+        ordered_categories.extend(
+            sorted(category for category in grouped_scales if category not in known_categories)
+        )
+
+        model = QStandardItemModel(self.scale_input)
+        header_font = QFont(self.scale_input.font())
+        header_font.setBold(True)
+
+        for category in ordered_categories:
+            header_item = QStandardItem(category)
+            header_item.setEnabled(False)
+            header_item.setSelectable(False)
+            header_item.setFont(header_font)
+            model.appendRow(header_item)
+
+            for scale_name in sorted(grouped_scales[category]):
+                scale_item = QStandardItem(f"  {scale_name}")
+                scale_item.setData(scale_name, Qt.ItemDataRole.UserRole)
+                aliases = SCALE_DEFINITIONS[scale_name].get("aliases") or []
+                if aliases:
+                    scale_item.setToolTip(f"Aliases: {', '.join(aliases)}")
+                model.appendRow(scale_item)
+
+        self.scale_input.setModel(model)
+        selected_index = self.scale_input.findData(selected_scale, Qt.ItemDataRole.UserRole)
+        if selected_index == -1:
+            selected_index = self.scale_input.findData("Natural Minor", Qt.ItemDataRole.UserRole)
+        if selected_index != -1:
+            self.scale_input.setCurrentIndex(selected_index)
+
+    def selected_scale_name(self):
+        """Return the current preset scale name, excluding header rows."""
+        scale_name = self.scale_input.currentData(Qt.ItemDataRole.UserRole)
+        return scale_name.strip() if isinstance(scale_name, str) else ""
+
+    def on_scale_changed(self, _index: int):
         """Refresh the available keys when the selected scale changes."""
+        scale_name = self.selected_scale_name()
         definition = SCALE_DEFINITIONS.get(scale_name)
         if definition is None:
             self.key_note_input.clear()
+            self.scale_meta.setText("")
             return
 
         current_key = self.key_note_input.currentText()
@@ -1404,7 +1456,7 @@ class ScaleWorkbenchWindow(QMainWindow):
 
     def open_fretboard_window(self):
         """Open a fretboard window for the currently selected preset scale."""
-        scale_name = self.scale_input.currentText().strip()
+        scale_name = self.selected_scale_name()
         key_note = self.key_note_input.currentText().strip()
         definition = SCALE_DEFINITIONS.get(scale_name)
         if not key_note or definition is None:

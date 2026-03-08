@@ -1,5 +1,18 @@
 {
   "default_keys": ["A", "Bb", "B", "C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab"],
+  "category_order": [
+    "Diatonic",
+    "Modes of Major",
+    "Pentatonic and Blues",
+    "Melodic Minor Modes",
+    "Harmonic Minor Modes",
+    "Harmonic Major Modes",
+    "Bebop",
+    "Symmetric",
+    "Named Heptatonic",
+    "Named Hexatonic",
+    "Japanese Pentatonic"
+  ],
   "scales": {
     "Major": {
       "category": "Diatonic",
