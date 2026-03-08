@@ -1,0 +1,322 @@
+{
+  "default_keys": ["A", "Bb", "B", "C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab"],
+  "scales": {
+    "Major": {
+      "category": "Diatonic",
+      "aliases": ["Ionian"],
+      "intervals": [0, 2, 4, 5, 7, 9, 11],
+      "degree_labels": ["1", "2", "3", "4", "5", "6", "7"]
+    },
+    "Natural Minor": {
+      "category": "Diatonic",
+      "aliases": ["Aeolian"],
+      "intervals": [0, 2, 3, 5, 7, 8, 10],
+      "degree_labels": ["1", "2", "b3", "4", "5", "b6", "b7"]
+    },
+    "Harmonic Minor": {
+      "category": "Diatonic",
+      "aliases": ["Aeolian Natural 7"],
+      "intervals": [0, 2, 3, 5, 7, 8, 11],
+      "degree_labels": ["1", "2", "b3", "4", "5", "b6", "7"]
+    },
+    "Melodic Minor": {
+      "category": "Diatonic",
+      "aliases": ["Jazz Minor"],
+      "intervals": [0, 2, 3, 5, 7, 9, 11],
+      "degree_labels": ["1", "2", "b3", "4", "5", "6", "7"]
+    },
+    "Ionian": {
+      "category": "Modes of Major",
+      "aliases": ["Major"],
+      "intervals": [0, 2, 4, 5, 7, 9, 11],
+      "degree_labels": ["1", "2", "3", "4", "5", "6", "7"]
+    },
+    "Dorian": {
+      "category": "Modes of Major",
+      "intervals": [0, 2, 3, 5, 7, 9, 10],
+      "degree_labels": ["1", "2", "b3", "4", "5", "6", "b7"]
+    },
+    "Phrygian": {
+      "category": "Modes of Major",
+      "intervals": [0, 1, 3, 5, 7, 8, 10],
+      "degree_labels": ["1", "b2", "b3", "4", "5", "b6", "b7"]
+    },
+    "Lydian": {
+      "category": "Modes of Major",
+      "intervals": [0, 2, 4, 6, 7, 9, 11],
+      "degree_labels": ["1", "2", "3", "#4", "5", "6", "7"]
+    },
+    "Mixolydian": {
+      "category": "Modes of Major",
+      "intervals": [0, 2, 4, 5, 7, 9, 10],
+      "degree_labels": ["1", "2", "3", "4", "5", "6", "b7"]
+    },
+    "Aeolian": {
+      "category": "Modes of Major",
+      "aliases": ["Natural Minor"],
+      "intervals": [0, 2, 3, 5, 7, 8, 10],
+      "degree_labels": ["1", "2", "b3", "4", "5", "b6", "b7"]
+    },
+    "Locrian": {
+      "category": "Modes of Major",
+      "intervals": [0, 1, 3, 5, 6, 8, 10],
+      "degree_labels": ["1", "b2", "b3", "4", "b5", "b6", "b7"]
+    },
+    "Major Pentatonic": {
+      "category": "Pentatonic and Blues",
+      "intervals": [0, 2, 4, 7, 9],
+      "degree_labels": ["1", "2", "3", "5", "6"]
+    },
+    "Minor Pentatonic": {
+      "category": "Pentatonic and Blues",
+      "intervals": [0, 3, 5, 7, 10],
+      "degree_labels": ["1", "b3", "4", "5", "b7"]
+    },
+    "Major Blues": {
+      "category": "Pentatonic and Blues",
+      "intervals": [0, 2, 3, 4, 7, 9],
+      "degree_labels": ["1", "2", "b3", "3", "5", "6"]
+    },
+    "Minor Blues": {
+      "category": "Pentatonic and Blues",
+      "intervals": [0, 3, 5, 6, 7, 10],
+      "degree_labels": ["1", "b3", "4", "b5", "5", "b7"]
+    },
+    "Diminished W-H": {
+      "category": "Symmetric",
+      "aliases": ["Whole-Half Diminished"],
+      "intervals": [0, 2, 3, 5, 6, 8, 9, 11],
+      "degree_labels": ["1", "2", "b3", "4", "b5", "#5", "6", "7"]
+    },
+    "Diminished H-W": {
+      "category": "Symmetric",
+      "aliases": ["Half-Whole Diminished"],
+      "intervals": [0, 1, 3, 4, 6, 7, 9, 10],
+      "degree_labels": ["1", "b2", "#2", "3", "#4", "5", "6", "b7"]
+    },
+    "Whole Tone": {
+      "category": "Symmetric",
+      "intervals": [0, 2, 4, 6, 8, 10],
+      "degree_labels": ["1", "2", "3", "#4", "#5", "b7"]
+    },
+    "Chromatic": {
+      "category": "Symmetric",
+      "intervals": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      "degree_labels": ["1", "b2", "2", "b3", "3", "4", "b5", "5", "b6", "6", "b7", "7"]
+    },
+    "Dorian b2": {
+      "category": "Melodic Minor Modes",
+      "intervals": [0, 1, 3, 5, 7, 9, 10],
+      "degree_labels": ["1", "b2", "b3", "4", "5", "6", "b7"]
+    },
+    "Lydian Augmented": {
+      "category": "Melodic Minor Modes",
+      "intervals": [0, 2, 4, 6, 8, 9, 11],
+      "degree_labels": ["1", "2", "3", "#4", "#5", "6", "7"]
+    },
+    "Lydian Dominant": {
+      "category": "Melodic Minor Modes",
+      "aliases": ["Acoustic", "Overtone"],
+      "intervals": [0, 2, 4, 6, 7, 9, 10],
+      "degree_labels": ["1", "2", "3", "#4", "5", "6", "b7"]
+    },
+    "Mixolydian b6": {
+      "category": "Melodic Minor Modes",
+      "aliases": ["Aeolian Dominant"],
+      "intervals": [0, 2, 4, 5, 7, 8, 10],
+      "degree_labels": ["1", "2", "3", "4", "5", "b6", "b7"]
+    },
+    "Locrian Natural 2": {
+      "category": "Melodic Minor Modes",
+      "aliases": ["Semilocrian"],
+      "intervals": [0, 2, 3, 5, 6, 8, 10],
+      "degree_labels": ["1", "2", "b3", "4", "b5", "b6", "b7"]
+    },
+    "Altered": {
+      "category": "Melodic Minor Modes",
+      "aliases": ["Super Locrian"],
+      "intervals": [0, 1, 3, 4, 6, 8, 10],
+      "degree_labels": ["1", "b2", "#2", "3", "b5", "#5", "b7"]
+    },
+    "Locrian Natural 6": {
+      "category": "Harmonic Minor Modes",
+      "aliases": ["Locrian 6"],
+      "intervals": [0, 1, 3, 5, 6, 9, 10],
+      "degree_labels": ["1", "b2", "b3", "4", "b5", "6", "b7"]
+    },
+    "Ionian Augmented": {
+      "category": "Harmonic Minor Modes",
+      "aliases": ["Major Augmented"],
+      "intervals": [0, 2, 4, 5, 8, 9, 11],
+      "degree_labels": ["1", "2", "3", "4", "#5", "6", "7"]
+    },
+    "Romanian Minor": {
+      "category": "Harmonic Minor Modes",
+      "aliases": ["Ukrainian Dorian", "Dorian #4"],
+      "intervals": [0, 2, 3, 6, 7, 9, 10],
+      "degree_labels": ["1", "2", "b3", "#4", "5", "6", "b7"]
+    },
+    "Phrygian Dominant": {
+      "category": "Harmonic Minor Modes",
+      "aliases": ["Hijaz", "Freygish"],
+      "intervals": [0, 1, 4, 5, 7, 8, 10],
+      "degree_labels": ["1", "b2", "3", "4", "5", "b6", "b7"]
+    },
+    "Lydian #2": {
+      "category": "Harmonic Minor Modes",
+      "intervals": [0, 3, 4, 6, 7, 9, 11],
+      "degree_labels": ["1", "#2", "3", "#4", "5", "6", "7"]
+    },
+    "Ultralocrian": {
+      "category": "Harmonic Minor Modes",
+      "aliases": ["Super Locrian bb7"],
+      "intervals": [0, 1, 3, 4, 6, 8, 9],
+      "degree_labels": ["1", "b2", "b3", "b4", "b5", "b6", "bb7"]
+    },
+    "Harmonic Major": {
+      "category": "Harmonic Major Modes",
+      "intervals": [0, 2, 4, 5, 7, 8, 11],
+      "degree_labels": ["1", "2", "3", "4", "5", "b6", "7"]
+    },
+    "Dorian b5": {
+      "category": "Harmonic Major Modes",
+      "intervals": [0, 2, 3, 5, 6, 9, 10],
+      "degree_labels": ["1", "2", "b3", "4", "b5", "6", "b7"]
+    },
+    "Phrygian b4": {
+      "category": "Harmonic Major Modes",
+      "intervals": [0, 1, 3, 4, 7, 8, 10],
+      "degree_labels": ["1", "b2", "b3", "b4", "5", "b6", "b7"]
+    },
+    "Lydian b3": {
+      "category": "Harmonic Major Modes",
+      "intervals": [0, 2, 3, 6, 7, 9, 11],
+      "degree_labels": ["1", "2", "b3", "#4", "5", "6", "7"]
+    },
+    "Mixolydian b9": {
+      "category": "Harmonic Major Modes",
+      "intervals": [0, 1, 4, 5, 7, 9, 10],
+      "degree_labels": ["1", "b2", "3", "4", "5", "6", "b7"]
+    },
+    "Lydian Augmented #2": {
+      "category": "Harmonic Major Modes",
+      "intervals": [0, 3, 4, 6, 8, 9, 11],
+      "degree_labels": ["1", "#2", "3", "#4", "#5", "6", "7"]
+    },
+    "Locrian bb7": {
+      "category": "Harmonic Major Modes",
+      "intervals": [0, 1, 3, 5, 6, 8, 9],
+      "degree_labels": ["1", "b2", "b3", "4", "b5", "b6", "bb7"]
+    },
+    "Dominant Bebop": {
+      "category": "Bebop",
+      "aliases": ["Mixolydian Bebop"],
+      "intervals": [0, 2, 4, 5, 7, 9, 10, 11],
+      "degree_labels": ["1", "2", "3", "4", "5", "6", "b7", "7"]
+    },
+    "Major Bebop": {
+      "category": "Bebop",
+      "intervals": [0, 2, 4, 5, 7, 8, 9, 11],
+      "degree_labels": ["1", "2", "3", "4", "5", "#5", "6", "7"]
+    },
+    "Dorian Bebop": {
+      "category": "Bebop",
+      "intervals": [0, 2, 3, 5, 7, 9, 10, 11],
+      "degree_labels": ["1", "2", "b3", "4", "5", "6", "b7", "7"]
+    },
+    "Melodic Minor Bebop": {
+      "category": "Bebop",
+      "aliases": ["Minor Sixth Diminished"],
+      "intervals": [0, 2, 3, 5, 7, 8, 9, 11],
+      "degree_labels": ["1", "2", "b3", "4", "5", "#5", "6", "7"]
+    },
+    "Harmonic Minor Bebop": {
+      "category": "Bebop",
+      "aliases": ["Natural Minor Bebop"],
+      "intervals": [0, 2, 3, 5, 7, 8, 10, 11],
+      "degree_labels": ["1", "2", "b3", "4", "5", "b6", "b7", "7"]
+    },
+    "Double Harmonic": {
+      "category": "Named Heptatonic",
+      "aliases": ["Byzantine"],
+      "intervals": [0, 1, 4, 5, 7, 8, 11],
+      "degree_labels": ["1", "b2", "3", "4", "5", "b6", "7"]
+    },
+    "Hungarian Minor": {
+      "category": "Named Heptatonic",
+      "aliases": ["Gypsy Minor", "Double Harmonic Minor"],
+      "intervals": [0, 2, 3, 6, 7, 8, 11],
+      "degree_labels": ["1", "2", "b3", "#4", "5", "b6", "7"]
+    },
+    "Hungarian Major": {
+      "category": "Named Heptatonic",
+      "intervals": [0, 3, 4, 6, 7, 9, 10],
+      "degree_labels": ["1", "#2", "3", "#4", "5", "6", "b7"]
+    },
+    "Neapolitan Minor": {
+      "category": "Named Heptatonic",
+      "intervals": [0, 1, 3, 5, 7, 8, 11],
+      "degree_labels": ["1", "b2", "b3", "4", "5", "b6", "7"]
+    },
+    "Neapolitan Major": {
+      "category": "Named Heptatonic",
+      "intervals": [0, 1, 3, 5, 7, 9, 11],
+      "degree_labels": ["1", "b2", "b3", "4", "5", "6", "7"]
+    },
+    "Persian": {
+      "category": "Named Heptatonic",
+      "aliases": ["Double Harmonic Major b5"],
+      "intervals": [0, 1, 4, 5, 6, 8, 11],
+      "degree_labels": ["1", "b2", "3", "4", "b5", "b6", "7"]
+    },
+    "Enigmatic": {
+      "category": "Named Heptatonic",
+      "intervals": [0, 1, 4, 6, 8, 10, 11],
+      "degree_labels": ["1", "b2", "3", "#4", "#5", "#6", "7"]
+    },
+    "Romanian Major": {
+      "category": "Named Heptatonic",
+      "aliases": ["Lydian Dominant b2"],
+      "intervals": [0, 1, 4, 6, 7, 9, 10],
+      "degree_labels": ["1", "b2", "3", "#4", "5", "6", "b7"]
+    },
+    "Augmented": {
+      "category": "Named Hexatonic",
+      "aliases": ["Symmetrical Augmented"],
+      "intervals": [0, 3, 4, 7, 8, 11],
+      "degree_labels": ["1", "#2", "3", "5", "#5", "7"]
+    },
+    "Prometheus": {
+      "category": "Named Hexatonic",
+      "intervals": [0, 2, 4, 6, 9, 10],
+      "degree_labels": ["1", "2", "3", "#4", "6", "b7"]
+    },
+    "Insen": {
+      "category": "Japanese Pentatonic",
+      "intervals": [0, 1, 5, 7, 10],
+      "degree_labels": ["1", "b2", "4", "5", "b7"]
+    },
+    "Iwato": {
+      "category": "Japanese Pentatonic",
+      "intervals": [0, 1, 5, 6, 10],
+      "degree_labels": ["1", "b2", "4", "b5", "b7"]
+    },
+    "Yo": {
+      "category": "Japanese Pentatonic",
+      "intervals": [0, 2, 5, 7, 9],
+      "degree_labels": ["1", "2", "4", "5", "6"]
+    },
+    "In Scale": {
+      "category": "Japanese Pentatonic",
+      "aliases": ["Miyako-bushi"],
+      "intervals": [0, 1, 5, 7, 8],
+      "degree_labels": ["1", "b2", "4", "5", "b6"]
+    },
+    "Japanese Mode": {
+      "category": "Japanese Pentatonic",
+      "aliases": ["Kumoi", "Kumoijoshi"],
+      "intervals": [0, 2, 3, 7, 8],
+      "degree_labels": ["1", "2", "b3", "5", "b6"]
+    }
+  }
+}
