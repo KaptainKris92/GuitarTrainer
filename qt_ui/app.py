@@ -1,5 +1,7 @@
+import json
 import math
 import threading
+from pathlib import Path
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 import numpy as np
@@ -51,6 +53,45 @@ from tuner_utils.threading_helper import ProtectedList
 CHROMATIC_SHARPS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 FLAT_TO_SHARP = {"DB": "C#", "EB": "D#", "GB": "F#", "AB": "G#", "BB": "A#"}
 FRETBOARD_STRING_NOTES = ["E", "B", "G", "D", "A", "E"]  # Top to bottom (high E to low E)
+SCALE_LIBRARY_PATH = Path(__file__).with_name("scale_library.json")
+
+
+def load_scale_library():
+    """Load and validate the external scale catalog used by the preset UI."""
+    raw = json.loads(SCALE_LIBRARY_PATH.read_text(encoding="utf-8"))
+    default_keys = raw.get("default_keys")
+    scales = raw.get("scales")
+
+    if not isinstance(default_keys, list) or not default_keys:
+        raise RuntimeError(f"Invalid or missing default_keys in {SCALE_LIBRARY_PATH}")
+    if not isinstance(scales, dict) or not scales:
+        raise RuntimeError(f"Invalid or missing scales in {SCALE_LIBRARY_PATH}")
+
+    for scale_name, definition in scales.items():
+        intervals = definition.get("intervals")
+        degree_labels = definition.get("degree_labels")
+        if not isinstance(intervals, list) or not intervals:
+            raise RuntimeError(f"Scale '{scale_name}' has no intervals in {SCALE_LIBRARY_PATH}")
+        if not isinstance(degree_labels, list) or len(degree_labels) != len(intervals):
+            raise RuntimeError(
+                f"Scale '{scale_name}' has mismatched degree labels in {SCALE_LIBRARY_PATH}"
+            )
+        if intervals != sorted(intervals):
+            raise RuntimeError(f"Scale '{scale_name}' intervals must be sorted ascending")
+        if any(not isinstance(interval, int) or interval < 0 or interval > 11 for interval in intervals):
+            raise RuntimeError(f"Scale '{scale_name}' has invalid semitone values")
+        if len(set(intervals)) != len(intervals):
+            raise RuntimeError(f"Scale '{scale_name}' contains duplicate semitone values")
+
+        keys = definition.get("keys", default_keys)
+        if not isinstance(keys, list) or not keys:
+            raise RuntimeError(f"Scale '{scale_name}' has invalid key options")
+        definition["keys"] = keys
+
+    return default_keys, scales
+
+
+_DEFAULT_SCALE_KEYS, SCALE_DEFINITIONS = load_scale_library()
 
 
 # Convert the selected device combo text into the numeric device index.
@@ -73,6 +114,24 @@ def note_at_fret(open_note: str, fret: int):
     """Return the note name at a given fret for a specific open string note."""
     idx = CHROMATIC_SHARPS.index(open_note)
     return CHROMATIC_SHARPS[(idx + fret) % 12]
+
+
+def build_scale_notes(root_note: str, intervals):
+    """Build a scale note list from a root note and semitone offsets."""
+    normalised_root = normalise_note_name(root_note)
+    if normalised_root is None:
+        return []
+    root_idx = CHROMATIC_SHARPS.index(normalised_root)
+    return [CHROMATIC_SHARPS[(root_idx + interval) % 12] for interval in intervals]
+
+
+def resolve_display_mode(choice: str) -> str:
+    """Map the UI display choice to the fretboard window mode string."""
+    if choice == "Note positions":
+        return "Notes"
+    if choice == "Scale degrees":
+        return "Degrees"
+    return "Note positions & Scale degrees"
 
 
 def rms_to_db(rms: float) -> float:
@@ -1118,30 +1177,30 @@ class ScaleFretboardWindow(QMainWindow):
         super().closeEvent(event)
 
 
-class ScaleWorkbenchWindow(QMainWindow):
-    """PoC workbench for entering custom scales and opening diagram windows."""
+class CustomScaleWindow(QMainWindow):
+    """Allow manual entry of custom scales and opening diagram windows."""
     def __init__(self):
-        """Initialise controls used to define and open scale fretboards."""
+        """Initialise controls used to define and open custom scale fretboards."""
         super().__init__()
-        self.setWindowTitle("Scale Notation to Fretboard (PoC)")
-        self.resize(820, 360)
+        self.setWindowTitle("Custom Scale Fretboard")
+        self.resize(760, 340)
         self.fretboard_windows = []
         self._build_ui()
 
     def _build_ui(self):
-        """Build input form and launch action for fretboard windows."""
+        """Build input form and launch action for custom fretboard windows."""
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
 
-        title = QLabel("Scale Notation to Fretboard")
+        title = QLabel("Custom Scale Fretboard")
         title.setFont(QFont("Segoe UI", 24, QFont.Weight.DemiBold))
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "Enter scale notes as a comma-separated list (e.g. A, B, C, D, E, F, G). "
+            "Enter a scale name, its notes, and an optional degree formula. "
             "Each click opens a separate fretboard window."
         )
         subtitle.setObjectName("muted")
@@ -1215,12 +1274,7 @@ class ScaleWorkbenchWindow(QMainWindow):
 
         name = self.scale_name_input.text().strip() or "Custom Scale"
         fret_count = int(self.fret_count_input.currentText())
-        display_choice = self.display_mode_input.currentText()
-        display_mode = "Note positions & Scale degrees"
-        if display_choice == "Note positions":
-            display_mode = "Notes"
-        elif display_choice == "Scale degrees":
-            display_mode = "Degrees"
+        display_mode = resolve_display_mode(self.display_mode_input.currentText())
         window = ScaleFretboardWindow(name, normalised, degree_labels, fret_count, display_mode)
         window.closed.connect(self.on_fretboard_closed)
         window.show()
@@ -1229,6 +1283,166 @@ class ScaleWorkbenchWindow(QMainWindow):
 
     def on_fretboard_closed(self, scale_name: str):
         """Track only live fretboard windows and clear status when none remain."""
+        closed_window = self.sender()
+        if closed_window in self.fretboard_windows:
+            self.fretboard_windows.remove(closed_window)
+        self.fretboard_windows = [w for w in self.fretboard_windows if w is not None and w.isVisible()]
+        if self.fretboard_windows:
+            self.status.setText(f"Fretboard windows open: {len(self.fretboard_windows)}")
+        else:
+            self.status.setText("")
+
+
+class ScaleWorkbenchWindow(QMainWindow):
+    """Preset scale picker backed by Berklee-style scale definitions."""
+    def __init__(self):
+        """Initialise controls for preset scales and the custom-scale launcher."""
+        super().__init__()
+        self.setWindowTitle("Scale Notation to Fretboard (PoC)")
+        self.resize(820, 320)
+        self.fretboard_windows = []
+        self.custom_scale_window = None
+        self._build_ui()
+        self.on_scale_changed(self.scale_input.currentText())
+
+    def _build_ui(self):
+        """Build the preset picker, launch actions, and display options."""
+        root = QWidget()
+        self.setCentralWidget(root)
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("Scale Notation to Fretboard")
+        title.setFont(QFont("Segoe UI", 24, QFont.Weight.DemiBold))
+        layout.addWidget(title)
+
+        subtitle = QLabel(
+            "Choose a key and scale from the preset library, or open the custom scale window "
+            "for manual note and interval entry."
+        )
+        subtitle.setObjectName("muted")
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
+
+        picker_layout = QGridLayout()
+        picker_layout.setHorizontalSpacing(12)
+        picker_layout.addWidget(QLabel("Key note"), 0, 0)
+        self.key_note_input = QComboBox()
+        self.key_note_input.setMinimumWidth(120)
+        picker_layout.addWidget(self.key_note_input, 0, 1)
+
+        picker_layout.addWidget(QLabel("Scale"), 0, 2)
+        self.scale_input = QComboBox()
+        self.scale_input.addItems(list(SCALE_DEFINITIONS.keys()))
+        self.scale_input.setCurrentText("Natural Minor")
+        self.scale_input.currentTextChanged.connect(self.on_scale_changed)
+        picker_layout.addWidget(self.scale_input, 0, 3)
+        layout.addLayout(picker_layout)
+
+        self.scale_meta = QLabel("")
+        self.scale_meta.setObjectName("muted")
+        self.scale_meta.setWordWrap(True)
+        layout.addWidget(self.scale_meta)
+
+        form = QGridLayout()
+        form.addWidget(QLabel("Fret range"), 0, 0)
+        self.fret_count_input = QComboBox()
+        self.fret_count_input.addItems(["12", "24"])
+        self.fret_count_input.setCurrentText("24")
+        form.addWidget(self.fret_count_input, 0, 1)
+
+        form.addWidget(QLabel("Display"), 1, 0)
+        self.display_mode_input = QComboBox()
+        self.display_mode_input.addItems(
+            ["Note positions & Scale degrees", "Note positions", "Scale degrees"]
+        )
+        self.display_mode_input.setCurrentText("Note positions & Scale degrees")
+        form.addWidget(self.display_mode_input, 1, 1)
+        layout.addLayout(form)
+
+        actions = QHBoxLayout()
+        self.open_btn = QPushButton("Open Fretboard Window")
+        self.open_btn.clicked.connect(self.open_fretboard_window)
+        actions.addWidget(self.open_btn)
+
+        self.custom_btn = QPushButton("Custom Scale...")
+        self.custom_btn.clicked.connect(self.open_custom_scale_window)
+        actions.addWidget(self.custom_btn)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        self.status = QLabel("Ready.")
+        self.status.setObjectName("muted")
+        layout.addWidget(self.status)
+
+    def on_scale_changed(self, scale_name: str):
+        """Refresh the available keys when the selected scale changes."""
+        definition = SCALE_DEFINITIONS.get(scale_name)
+        if definition is None:
+            self.key_note_input.clear()
+            return
+
+        current_key = self.key_note_input.currentText()
+        self.key_note_input.blockSignals(True)
+        self.key_note_input.clear()
+        self.key_note_input.addItems(definition["keys"])
+        if current_key in definition["keys"]:
+            self.key_note_input.setCurrentText(current_key)
+        else:
+            self.key_note_input.setCurrentIndex(0)
+        self.key_note_input.blockSignals(False)
+
+        meta_parts = []
+        category = definition.get("category")
+        aliases = definition.get("aliases") or []
+        if category:
+            meta_parts.append(category)
+        if aliases:
+            meta_parts.append(f"Aliases: {', '.join(aliases)}")
+        self.scale_meta.setText(" | ".join(meta_parts))
+
+    def open_fretboard_window(self):
+        """Open a fretboard window for the currently selected preset scale."""
+        scale_name = self.scale_input.currentText().strip()
+        key_note = self.key_note_input.currentText().strip()
+        definition = SCALE_DEFINITIONS.get(scale_name)
+        if not key_note or definition is None:
+            self.status.setText("Choose a valid key and scale.")
+            return
+
+        scale_notes = build_scale_notes(key_note, definition["intervals"])
+        if not scale_notes:
+            self.status.setText("Unable to build the selected scale.")
+            return
+
+        display_mode = resolve_display_mode(self.display_mode_input.currentText())
+        fret_count = int(self.fret_count_input.currentText())
+        window_title = f"{key_note} {scale_name}"
+        window = ScaleFretboardWindow(
+            window_title,
+            scale_notes,
+            definition["degree_labels"],
+            fret_count,
+            display_mode,
+        )
+        window.closed.connect(self.on_fretboard_closed)
+        window.show()
+        self.fretboard_windows.append(window)
+        self.status.setText(f"Fretboard windows open: {len(self.fretboard_windows)}")
+
+    def open_custom_scale_window(self):
+        """Open or focus the separate custom-scale entry window."""
+        if self.custom_scale_window is not None and self.custom_scale_window.isVisible():
+            self.custom_scale_window.raise_()
+            self.custom_scale_window.activateWindow()
+            return
+
+        self.custom_scale_window = CustomScaleWindow()
+        self.custom_scale_window.show()
+
+    def on_fretboard_closed(self, scale_name: str):
+        """Track only live preset fretboard windows and clear status when none remain."""
         closed_window = self.sender()
         if closed_window in self.fretboard_windows:
             self.fretboard_windows.remove(closed_window)
