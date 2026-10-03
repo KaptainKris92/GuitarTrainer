@@ -9,11 +9,16 @@ export type Player = {
   xp: number
   dayStreak: number
   lastDay: string
+  /** The last day a daily session was completed. */
+  lastDaily: string
 }
 
 export type Settings = {
   theme: string
   voice: boolean
+  sfx: boolean
+  /** Ignore the skill tree's locks. */
+  unlockAll: boolean
   input: 'mic' | 'tap'
   maxFret: 12 | 24
   naturalsOnly: boolean
@@ -29,11 +34,13 @@ type Save = { current: string; players: Record<string, Player> }
 const SAVE_KEY = 'guitar-trainer.save'
 const SETTINGS_KEY = 'guitar-trainer.settings'
 
-const newPlayer = (): Player => ({ stats: {}, rounds: [], xp: 0, dayStreak: 0, lastDay: '' })
+const newPlayer = (): Player => ({ stats: {}, rounds: [], xp: 0, dayStreak: 0, lastDay: '', lastDaily: '' })
 
 const DEFAULT_SETTINGS: Settings = {
   theme: 'midnight',
   voice: true,
+  sfx: true,
+  unlockAll: false,
   input: 'mic',
   maxFret: 12,
   naturalsOnly: true,

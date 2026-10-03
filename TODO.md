@@ -1,17 +1,9 @@
-'''
----------
-| TO-DO |
---------
-- Sight reading - Name the note
-- Sight reading - Play the note
-- Keys - Number of sharps/flats
-- Keys - Name the notes
-- Keys - Name the chords
-- Chords - Name the notes
-- Scales - Name the notes
-- Add ear exercises:
-	- Identify the interval
-	- Play back the note
-	- Identify the note?
-- Other statistics (e.g. number of games played, average % correct)
-'''
+# To do
+
+- Ear training: identify a single note by ear
+- Keys: name the notes of a key (multiple choice)
+- Statistics page: games played, accuracy over time
+- Choose which chord types and scales an exercise asks for
+- Desktop build with Tauri (needs the Rust toolchain)
+- Chord recognition from a strummed chord
+- Sync progress between devices (needs a server)

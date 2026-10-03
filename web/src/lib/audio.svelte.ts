@@ -119,17 +119,33 @@ class Mic {
 
 export const mic = new Mic()
 
-/** Play a short plucked tone at the given MIDI pitch. */
-export function playTone(midi: number) {
+function beep(freq: number, delay: number, duration: number, type: OscillatorType, volume: number) {
   const ctx = audioContext()
   void ctx.resume()
+  const start = ctx.currentTime + delay
   const osc = ctx.createOscillator()
   const gain = ctx.createGain()
-  osc.type = 'triangle'
-  osc.frequency.value = midiToFreq(midi)
-  gain.gain.setValueAtTime(0.25, ctx.currentTime)
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8)
+  osc.type = type
+  osc.frequency.value = freq
+  gain.gain.setValueAtTime(volume, start)
+  gain.gain.exponentialRampToValueAtTime(0.001, start + duration)
   osc.connect(gain).connect(ctx.destination)
-  osc.start()
-  osc.stop(ctx.currentTime + 0.8)
+  osc.start(start)
+  osc.stop(start + duration)
+}
+
+/** Play a short plucked tone at the given MIDI pitch, optionally after a delay in seconds. */
+export function playTone(midi: number, delay = 0) {
+  beep(midiToFreq(midi), delay, 0.8, 'triangle', 0.25)
+}
+
+const SFX: Record<string, [midi: number, delay: number][]> = {
+  good: [[84, 0], [91, 0.08]],
+  bad: [[45, 0], [44, 0.1]],
+  done: [[72, 0], [76, 0.1], [79, 0.2], [84, 0.3]],
+}
+
+/** Short feedback sounds for right and wrong answers and the end of a round. */
+export function sfx(kind: 'good' | 'bad' | 'done') {
+  for (const [midi, delay] of SFX[kind]) beep(midiToFreq(midi), delay, 0.18, kind === 'bad' ? 'sawtooth' : 'sine', 0.12)
 }

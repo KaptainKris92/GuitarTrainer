@@ -114,6 +114,11 @@
           <button onclick={() => mic.start()}>Enable mic</button>
         {/if}
       </label>
+      <label class="check"><input type="checkbox" bind:checked={store.settings.voice} /> Voice prompts</label>
+      <label class="check"><input type="checkbox" bind:checked={store.settings.sfx} /> Sound effects</label>
+      <label class="check">
+        <input type="checkbox" bind:checked={store.settings.unlockAll} /> Unlock all exercises
+      </label>
       <div class="backup">
         <button onclick={exportBackup}>Export backup</button>
         <button onclick={() => importInput.click()}>Import backup</button>
@@ -235,6 +240,12 @@
     gap: 0.25rem;
     font-size: 0.85rem;
     color: var(--muted);
+  }
+  .panel label.check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text);
   }
   .panel select {
     text-transform: capitalize;

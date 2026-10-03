@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import library from '../data/scale_library.json'
-import { buildTheChord, findTheInterval, findTheNote, modeLabel } from './exercises'
+import {
+  buildTheChord,
+  chordsInKey,
+  EXERCISES,
+  findTheInterval,
+  findTheNote,
+  isUnlocked,
+  keySignatures,
+  mixedSession,
+  modeLabel,
+  playTheScale,
+  readNameIt,
+} from './exercises'
 import type { Settings } from './store.svelte'
 import { freqToNote, midiAt, scaleNotes } from './theory'
 import { mastery, nextDayStreak, NoteGate, pickKey, record, type Stats } from './trainer'
@@ -99,6 +111,51 @@ describe('exercises', () => {
     expect(question.parts.map((part) => part.label)).toEqual(['E♭', 'G♭', 'B♭', 'D♭'])
     expect(question.parts[1].answers).toContainEqual({ string: 6, fret: 2 })
     expect(buildTheChord.keys(settings)).toHaveLength(84)
+  })
+
+  it('asks for scales in order with correct spelling', () => {
+    const question = playTheScale.question('sc:Dorian:D', settings)
+    expect(question.ordered).toBe(true)
+    expect(question.parts.map((part) => part.label)).toEqual(['D', 'E', 'F', 'G', 'A', 'B', 'C'])
+  })
+
+  it('knows key signatures and the chords of a key', () => {
+    expect(keySignatures.question('ks:A:major', settings).correct).toBe('3 sharps')
+    expect(keySignatures.question('ks:Eb:major', settings).correct).toBe('3 flats')
+    expect(keySignatures.question('ks:A:minor', settings).correct).toBe('None')
+    const chord = chordsInKey.question('kc:D:7', settings)
+    expect(chord.correct).toBe('C♯dim')
+    expect(chord.choices).toContain(chord.correct)
+    expect(new Set(chord.choices).size).toBe(4)
+  })
+
+  it('writes guitar notation an octave above the sounding pitch', () => {
+    const lowE = readNameIt.question('rn:40', settings)
+    expect(lowE.staff).toBe('e/3')
+    expect(lowE.correct).toBe('E')
+    expect(readNameIt.question('rn:60', settings).staff).toBe('c/5')
+  })
+
+  it('produces an answerable question for every key of every exercise', () => {
+    for (const exercise of [...EXERCISES, mixedSession(EXERCISES)]) {
+      const keys = exercise.keys(settings)
+      expect(new Set(keys).size, exercise.id).toBe(keys.length)
+      for (const key of keys) {
+        const question = exercise.question(key, settings)
+        if (question.choices) expect(question.choices, key).toContain(question.correct)
+        else expect(question.parts.every((part) => part.answers.length > 0), key).toBe(true)
+      }
+    }
+  })
+
+  it('unlocks an exercise once the one before it is partly mastered', () => {
+    const stats: Stats = {}
+    expect(isUnlocked(findTheNote, stats)).toBe(true)
+    expect(isUnlocked(findTheInterval, stats)).toBe(false)
+    for (const key of findTheNote.keys({ ...settings, maxFret: 12, naturalsOnly: true }).slice(0, 12)) {
+      for (let i = 0; i < 5; i++) record(stats, key, true, 1000)
+    }
+    expect(isUnlocked(findTheInterval, stats)).toBe(true) // 12 of 42 questions mastered
   })
 
   it('separates high scores by difficulty settings', () => {
