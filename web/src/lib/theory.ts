@@ -19,14 +19,6 @@ export const pcPromptName = (pc: number) =>
 
 export const stringName = (string: number) => pcName(pcOf(TUNING[string - 1]))
 
-/** Frets on a string (0..maxFret) that sound the given pitch class. */
-export function fretsFor(string: number, pc: number, maxFret: number): number[] {
-  const first = (((pc - TUNING[string - 1]) % 12) + 12) % 12
-  const frets = []
-  for (let fret = first; fret <= maxFret; fret += 12) frets.push(fret)
-  return frets
-}
-
 /** Nearest MIDI note and the offset from it in cents. */
 export function freqToNote(freq: number, a4 = 440): { midi: number; cents: number } {
   const exact = 69 + 12 * Math.log2(freq / a4)

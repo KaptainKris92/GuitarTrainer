@@ -1,22 +1,76 @@
 :root {
-  --bg: #14110f;
-  --surface: #1e1a17;
-  --surface-2: #2a2420;
-  --border: #3a322b;
-  --text: #efe6dc;
-  --muted: #a39686;
-  --accent: #f5a524;
+  /* Midnight (default): deep navy with a teal accent. */
+  --bg: #0a0f1f;
+  --surface: #121930;
+  --surface-2: #1c2542;
+  --border: #2b3760;
+  --text: #e8ecf8;
+  --muted: #8f9bc2;
+  --accent: #4fe3c8;
+  --accent-ink: #06221d;
   --good: #4ade80;
-  --bad: #f87171;
-  --wood: #33251b;
-  --inlay: #5a4636;
-  --fret: #9a9288;
-  --string: #d9cfc0;
+  --bad: #fb7185;
+  --board: #0d1429;
+  --inlay: #263257;
+  --fret: #55628f;
+  --string: #c7d0ea;
 
   font: 16px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: dark;
   color: var(--text);
   background: var(--bg);
+}
+
+:root[data-theme='neon'] {
+  --bg: #0c0613;
+  --surface: #160c23;
+  --surface-2: #241437;
+  --border: #3c235c;
+  --text: #f4eaff;
+  --muted: #a892c6;
+  --accent: #ff4fd8;
+  --accent-ink: #2a0022;
+  --good: #5dfc9b;
+  --bad: #ff6b6b;
+  --board: #110919;
+  --inlay: #34204f;
+  --fret: #6d4fa0;
+  --string: #dccbff;
+}
+
+:root[data-theme='mono'] {
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --surface-2: #1f1f1f;
+  --border: #303030;
+  --text: #f2f2f2;
+  --muted: #8c8c8c;
+  --accent: #c6f432;
+  --accent-ink: #141a00;
+  --good: #4ade80;
+  --bad: #ff5c5c;
+  --board: #0f0f0f;
+  --inlay: #2a2a2a;
+  --fret: #575757;
+  --string: #d4d4d4;
+}
+
+:root[data-theme='paper'] {
+  --bg: #f3f1ec;
+  --surface: #ffffff;
+  --surface-2: #eceae3;
+  --border: #d6d2c6;
+  --text: #1b1b1f;
+  --muted: #6d6a63;
+  --accent: #3355ff;
+  --accent-ink: #ffffff;
+  --good: #22a15a;
+  --bad: #e5484d;
+  --board: #1b1b1f;
+  --inlay: #37373d;
+  --fret: #74747c;
+  --string: #e9e6dd;
+  color-scheme: light;
 }
 
 body {
@@ -65,7 +119,7 @@ button:hover {
 button.primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #17120d;
+  color: var(--accent-ink);
 }
 
 button:focus-visible,
@@ -87,4 +141,17 @@ select:focus-visible {
   gap: 0.25rem;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+.controls label.check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text);
+}
+
+input[type='checkbox'] {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--accent);
 }

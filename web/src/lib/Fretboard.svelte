@@ -69,8 +69,8 @@
       </text>
     {/each}
 
-    {#each markers as marker (`${marker.string}:${marker.fret}`)}
-      <g class="marker {marker.tone ?? 'note'}">
+    {#each markers as marker (`${marker.string}:${marker.fret}:${marker.tone}`)}
+      <g class="marker {marker.tone ?? 'note'}" class:colored={marker.color}>
         <circle cx={cellX(marker.fret)} cy={stringY(marker.string)} r="12.5" style:fill={marker.color} />
         {#if marker.label}
           <text x={cellX(marker.fret)} y={stringY(marker.string) + 4}>{marker.label}</text>
@@ -109,7 +109,7 @@
     user-select: none;
   }
   .board {
-    fill: var(--wood);
+    fill: var(--board);
   }
   .inlay {
     fill: var(--inlay);
@@ -119,7 +119,7 @@
     stroke-width: 2;
   }
   .nut {
-    fill: var(--text);
+    fill: var(--string);
   }
   .string {
     stroke: var(--string);
@@ -159,10 +159,15 @@
   .marker.root circle {
     fill: var(--accent);
   }
-  .marker.root text,
+  .marker.root text {
+    fill: var(--accent-ink);
+  }
   .marker.good text,
   .marker.bad text {
-    fill: #17120d;
+    fill: #111;
+  }
+  .marker.colored text {
+    fill: #fff;
   }
   .marker.good circle {
     fill: var(--good);

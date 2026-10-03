@@ -1,15 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import library from '../data/scale_library.json'
-import { fretsFor, freqToNote, midiAt, pcOf, scaleNotes } from './theory'
-import { allItems, mastery, NoteGate, pickItem, record, type Stats } from './trainer'
+import { findTheInterval, findTheNote } from './exercises'
+import type { Settings } from './store.svelte'
+import { freqToNote, midiAt, scaleNotes } from './theory'
+import { mastery, nextDayStreak, NoteGate, pickKey, record, type Stats } from './trainer'
 
 describe('theory', () => {
-  it('finds every fret for a pitch class on a string', () => {
-    expect(fretsFor(6, 4, 12)).toEqual([0, 12]) // E on low E
-    expect(fretsFor(3, 0, 12)).toEqual([5]) // C on G
-    for (const fret of fretsFor(2, 1, 24)) expect(pcOf(midiAt(2, fret))).toBe(1)
-  })
-
   it('maps frequencies to notes and cents', () => {
     expect(freqToNote(82.41).midi).toBe(40)
     const sharp = freqToNote(440 * 2 ** (20 / 1200))
@@ -32,24 +28,19 @@ describe('theory', () => {
 })
 
 describe('trainer', () => {
-  const items = allItems([1, 2], true)
+  it('favours weak questions and never repeats the previous one', () => {
+    const keys = ['a', 'b', 'c', 'd']
+    const stats: Stats = {}
+    for (const key of keys) for (let i = 0; i < 5; i++) record(stats, key, key !== 'a', 1000)
+    expect(mastery(stats.a)).toBe(0)
+    expect(mastery(stats.b)).toBe(1)
 
-  it('favours weak items and avoids repeating a pitch class', () => {
-    let stats: Stats = {}
-    for (const item of items) {
-      for (let i = 0; i < 5; i++) stats = record(stats, item, !(item.string === 2 && item.pc === 0), 1000)
-    }
-    const weak = { string: 2, pc: 0 }
-    expect(mastery(stats['2:0'])).toBe(0)
-    expect(mastery(stats['1:0'])).toBe(1)
-
-    let weakPicks = 0
     let seed = 0
     const rand = () => (seed = (seed * 9301 + 49297) % 233280) / 233280
-    for (let i = 0; i < 1400; i++) if (pickItem(items, stats, rand).pc === weak.pc) weakPicks++
-    // C appears on both strings: weights 5 (weak) + 1 out of a total of 18.
-    expect(weakPicks / 1400).toBeGreaterThan(0.28)
-    for (let i = 0; i < 50; i++) expect(pickItem(items, stats, rand, 0).pc).not.toBe(0)
+    let weakPicks = 0
+    for (let i = 0; i < 1600; i++) if (pickKey(keys, stats, rand) === 'a') weakPicks++
+    expect(weakPicks / 1600).toBeGreaterThan(0.55) // weight 5 of 8
+    for (let i = 0; i < 50; i++) expect(pickKey(keys, stats, rand, 'a')).not.toBe('a')
   })
 
   it('reports a held note once and re-arms after silence', () => {
@@ -61,5 +52,44 @@ describe('trainer', () => {
     expect(feedAll([62, 62, 62])).toEqual([null, null, 62])
     feedAll([null], true)
     expect(feedAll([62, 62, 62])).toEqual([null, null, 62])
+  })
+
+  it('counts day streaks across consecutive days only', () => {
+    expect(nextDayStreak('', 0, '2026-03-01')).toBe(1)
+    expect(nextDayStreak('2026-02-28', 4, '2026-03-01')).toBe(5)
+    expect(nextDayStreak('2026-03-01', 5, '2026-03-01')).toBe(5)
+    expect(nextDayStreak('2026-02-27', 5, '2026-03-01')).toBe(1)
+  })
+})
+
+describe('exercises', () => {
+  const settings = { maxFret: 24, naturalsOnly: false, strings: [1, 2, 3, 4, 5, 6] } as Settings
+
+  it('covers every fret of every string exactly once across the note questions', () => {
+    for (const maxFret of [12, 24] as const) {
+      const positions = findTheNote
+        .keys({ ...settings, maxFret })
+        .flatMap((key) => findTheNote.question(key, { ...settings, maxFret }).answers)
+      expect(positions).toHaveLength(6 * (maxFret + 1))
+      expect(new Set(positions.map((p) => `${p.string}:${p.fret}`)).size).toBe(positions.length)
+    }
+  })
+
+  it('asks for low and high octaves separately on 24 frets', () => {
+    const low = findTheNote.question('6:9', settings) // A on the low E string
+    const high = findTheNote.question('6:9:h', settings)
+    expect(low.answers).toEqual([{ string: 6, fret: 5 }])
+    expect(high.answers).toEqual([{ string: 6, fret: 17 }])
+  })
+
+  it('builds interval questions whose answers are the right distance from the root', () => {
+    for (const key of findTheInterval.keys(settings)) {
+      const question = findTheInterval.question(key, settings)
+      const root = question.given[0]
+      expect(question.answers.length).toBeGreaterThan(0)
+      for (const answer of question.answers) {
+        expect(midiAt(answer.string, answer.fret) - midiAt(root.string, root.fret)).toBe(Number(key.slice(3)))
+      }
+    }
   })
 })

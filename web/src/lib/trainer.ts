@@ -1,20 +1,9 @@
-import { NATURAL_PCS } from './theory'
-
-/** One thing to learn: a pitch class on a string. */
-export type Item = { string: number; pc: number }
+/** Per-question history, keyed by the exercise's question key. */
 export type Stat = { seen: number; correct: number; avgMs: number }
 export type Stats = Record<string, Stat>
 
-const STORAGE_KEY = 'guitar-trainer.note-stats'
 const FAST_MS = 1500
 const SLOW_MS = 6000
-
-export const itemKey = (item: Item) => `${item.string}:${item.pc}`
-
-export function allItems(strings: number[], naturalsOnly: boolean): Item[] {
-  const pcs = naturalsOnly ? NATURAL_PCS : [...Array(12).keys()]
-  return strings.flatMap((string) => pcs.map((pc) => ({ string, pc })))
-}
 
 /** 0 (unknown) to 1 (answered reliably and quickly). */
 export function mastery(stat: Stat | undefined): number {
@@ -25,11 +14,11 @@ export function mastery(stat: Stat | undefined): number {
   return accuracy * confidence * (0.5 + 0.5 * speed)
 }
 
-/** Weighted random pick favouring weak items; never repeats the previous pitch class. */
-export function pickItem(items: Item[], stats: Stats, rand = Math.random, avoidPc?: number): Item {
-  const candidates = items.filter((item) => item.pc !== avoidPc)
-  const pool = candidates.length ? candidates : items
-  const weights = pool.map((item) => 1 + 4 * (1 - mastery(stats[itemKey(item)])))
+/** Weighted random pick favouring weak questions; never repeats `avoid`. */
+export function pickKey(keys: string[], stats: Stats, rand = Math.random, avoid?: string): string {
+  const candidates = keys.filter((key) => key !== avoid)
+  const pool = candidates.length ? candidates : keys
+  const weights = pool.map((key) => 1 + 4 * (1 - mastery(stats[key])))
   let roll = rand() * weights.reduce((a, b) => a + b, 0)
   for (let i = 0; i < pool.length; i++) {
     roll -= weights[i]
@@ -38,28 +27,25 @@ export function pickItem(items: Item[], stats: Stats, rand = Math.random, avoidP
   return pool[pool.length - 1]
 }
 
-export function record(stats: Stats, item: Item, correct: boolean, ms: number): Stats {
-  const prev = stats[itemKey(item)] ?? { seen: 0, correct: 0, avgMs: ms }
-  return {
-    ...stats,
-    [itemKey(item)]: {
-      seen: prev.seen + 1,
-      correct: prev.correct + (correct ? 1 : 0),
-      avgMs: prev.seen === 0 ? ms : prev.avgMs * 0.7 + ms * 0.3,
-    },
+/** Update the history for one question in place. */
+export function record(stats: Stats, key: string, correct: boolean, ms: number) {
+  const prev = stats[key]
+  stats[key] = {
+    seen: (prev?.seen ?? 0) + 1,
+    correct: (prev?.correct ?? 0) + (correct ? 1 : 0),
+    avgMs: prev ? prev.avgMs * 0.7 + ms * 0.3 : ms,
   }
 }
 
-export function loadStats(): Stats {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
-  } catch {
-    return {}
-  }
-}
+export const levelFor = (xp: number) => Math.floor(Math.sqrt(xp / 150)) + 1
+export const xpForLevel = (level: number) => 150 * (level - 1) ** 2
 
-export function saveStats(stats: Stats) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(stats))
+/** Day streak after practising on `today` (dates as YYYY-MM-DD). */
+export function nextDayStreak(lastDay: string, streak: number, today: string): number {
+  if (lastDay === today) return streak
+  const yesterday = new Date(`${today}T12:00:00`)
+  yesterday.setDate(yesterday.getDate() - 1)
+  return lastDay === yesterday.toLocaleDateString('sv') ? streak + 1 : 1
 }
 
 /**
