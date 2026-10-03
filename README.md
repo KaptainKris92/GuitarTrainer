@@ -1,81 +1,16 @@
 # GuitarTrainer
 
-## Web app (in progress)
+A web app that gamifies guitar practice: fretboard notes, scales, intervals and music theory.
+Built with Svelte and TypeScript in `web/`.
 
-The app is being rebuilt as a web app in `web/` (Svelte + TypeScript). It currently has a
-note-finding game (answer with your guitar or by tapping the fretboard), a scale explorer and a tuner.
+## Running the app
 
 - `cd web`
 - `npm install`
 - `npm run dev`, then open the printed URL
 - `npm test` runs the unit tests
 
-The sections below describe the original Python app, which is still in the repo.
+Answer exercises by playing your guitar (the browser will ask for microphone access) or by
+tapping the on-screen fretboard.
 
-## Installation
-
-### Prerequisites
-- Python 3.12
-- Windows audio stack support for `pyaudio`/`aubio`
-
-### Install steps
-1. Create and activate a virtual environment.
-2. Install dependencies:
-   - `pip install -r requirements.txt`
-
-If wheel/build errors occur (typically for `aubio`/`pyaudio` on Windows):
-- Install [Visual Studio Community 2022](https://visualstudio.microsoft.com/vs/community/) with:
-  - `Python development`
-  - `Python native development tools`
-  - `Python web support`
-- If still needed, install `Desktop development with C++` from Visual Studio Build Tools.
-- Then run:
-  - `pip install --upgrade pip wheel setuptools`
-
-## Running the app
-Run:
-- `python main.py`
-
-## App flow (current UI)
-
-1. In the main menu, select an input device and click `Use Device`.
-2. Open either:
-   - `Open Tuner`
-   - `Open Note Trainer`
-
-### Tuner
-- Play one string at a time.
-- The UI shows:
-  - detected note
-  - detected frequency
-  - cents offset
-  - tune direction hints (`Tune Down` / `Tune Up`)
-  - `IN TUNE` indicator when within threshold
-
-### Note Trainer
-- Set:
-  - `Time per trial (seconds)`
-  - `Total trials`
-- Click `Start Session`.
-- Use `Cancel Session` to stop after the current trial.
-- Progress markers update per trial (correct/incorrect).
-- `High Scores` shows best runs by game settings.
-- `Missed Notes` shows most frequently missed notes in a chart.
-
-## Data storage
-- SQLite database: `databases/score_database.db`
-- Stores:
-  - per-trial results (`score_log`)
-  - final game scores (`final_score_log`)
-
-## Screenshots
-Current screenshots in `screenshots/` are from earlier UI iterations and should be refreshed to match the latest PySide6 interface.
-- Main Menu: `screenshots/01-MainMenu.png`
-- Note Trainer: `screenshots/02a-NoteTrainerMain1.png`, `screenshots/02b-NoteTrainerMain2.png`
-- High Scores: `screenshots/03-NoteTrainerHighScore.png`
-- Missed Notes: `screenshots/04-NoteTrainerMissedNotes.png`
-- Console output: `screenshots/05-ConsoleLog.png`
-
-## Attribution
-
-Guitar tuner is based off [this project ](https://github.com/TomSchimansky/GuitarTuner) by [Tom Schimansky](https://github.com/TomSchimansky).
+The original Python (PySide6) version of the app lives on the `feature/scale-selection` branch.
