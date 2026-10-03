@@ -1,5 +1,17 @@
 # GuitarTrainer
 
+## Web app (in progress)
+
+The app is being rebuilt as a web app in `web/` (Svelte + TypeScript). It currently has a
+note-finding game (answer with your guitar or by tapping the fretboard), a scale explorer and a tuner.
+
+- `cd web`
+- `npm install`
+- `npm run dev`, then open the printed URL
+- `npm test` runs the unit tests
+
+The sections below describe the original Python app, which is still in the repo.
+
 ## Installation
 
 ### Prerequisites
