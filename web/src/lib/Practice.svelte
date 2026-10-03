@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { mic, playTone } from './audio.svelte'
-  import { EXERCISES, INTERVAL_NAMES, noteKeyAt, type Question } from './exercises'
+  import { CHORD_TYPES, EXERCISES, INTERVAL_NAMES, modeLabel, noteKeyAt, type Part, type Question } from './exercises'
   import Fretboard, { type Marker } from './Fretboard.svelte'
   import { speak, stopSpeaking } from './speech'
   import { store } from './store.svelte'
@@ -9,7 +9,6 @@
   import { mastery, NoteGate, pickKey, record, type Stat } from './trainer'
 
   const ROUND_LENGTH = 10
-  const TIME_LIMITS = [0, 10, 5, 3]
 
   const settings = store.settings
   let exercise = $state(EXERCISES[0])
@@ -18,6 +17,9 @@
   let question = $state.raw<Question>()
   let results = $state<boolean[]>([])
   let feedback = $state<Marker[]>([])
+  /** Notes of the current question found so far. */
+  let found = $state<Marker[]>([])
+  let remainingParts: Part[] = []
   let message = $state('')
   let score = $state(0)
   let streak = $state(0)
@@ -45,15 +47,29 @@
     return markers
   })
 
+  const mode = $derived(modeLabel(exercise, settings))
+  const leaderboard = $derived(store.leaderboard(mode))
+  let previousBest = $state(0)
+
+  /** Average mastery across all of the exercise's questions whose key starts with `prefix`. */
+  function groupColor(prefix: string) {
+    const keys = exercise.keys(settings).filter((key) => key.startsWith(prefix))
+    if (!keys.some((key) => store.player.stats[key])) return undefined
+    const total = keys.reduce((sum, key) => sum + mastery(store.player.stats[key]), 0)
+    return `hsl(${Math.round((total / keys.length) * 140)} 60% 38%)`
+  }
+
   async function start() {
     if (settings.input === 'mic' && !mic.running) {
       await mic.start()
       if (!mic.running) return
     }
+    settings.timeLimit = Math.max(0, Number(settings.timeLimit) || 0)
     results = []
     score = 0
     streak = 0
     lastAnswerMidi = null
+    previousBest = store.bestScore(mode)
     phase = 'playing'
     next()
   }
@@ -65,9 +81,11 @@
     do {
       candidate = exercise.question(pickKey(keys, store.player.stats, Math.random, question?.key), settings)
       // A note still ringing from the last answer is ignored by the gate, so do not ask for it again.
-    } while (candidate.answers.some((a) => midiAt(a.string, a.fret) === lastAnswerMidi) && ++tries < 5)
+    } while (candidate.parts[0].answers.some((a) => midiAt(a.string, a.fret) === lastAnswerMidi) && ++tries < 5)
 
     question = candidate
+    remainingParts = [...candidate.parts]
+    found = []
     feedback = []
     message = ''
     remaining = 1
@@ -90,10 +108,11 @@
   }
 
   const answerMarkers = (tone: Marker['tone']): Marker[] =>
-    question!.answers.map((position) => ({ ...position, label: question!.answerLabel, tone }))
+    remainingParts.flatMap((part) => part.answers.map((position) => ({ ...position, label: part.label, tone })))
 
   /** Finish the current question and move on. */
   function settle(correct: boolean, note = '', played: Marker[] = []) {
+    if (!listening) return
     cancelAnimationFrame(clock)
     listening = false
     const ms = performance.now() - startedAt
@@ -109,7 +128,7 @@
       streak = 0
     }
     results = [...results, firstTryCorrect]
-    feedback = correct ? played : [...answerMarkers('root'), ...played]
+    feedback = correct ? [] : [...answerMarkers('root'), ...played]
     message = note
     advanceTimer = setTimeout(() => (results.length >= ROUND_LENGTH ? finish() : next()), correct ? 700 : 1600)
   }
@@ -124,12 +143,20 @@
   /** Handle a played note. `tapped` is set when it came from the on-screen fretboard. */
   function answer(midi: number, tapped?: { string: number; fret: number }) {
     if (!listening || !question) return
-    const hit = question.answers.find((a) => (tapped ? a.string === tapped.string && a.fret === tapped.fret : midiAt(a.string, a.fret) === midi))
-    if (hit) {
+    const matches = (a: { string: number; fret: number }) =>
+      tapped ? a.string === tapped.string && a.fret === tapped.fret : midiAt(a.string, a.fret) === midi
+    const part = remainingParts.find((p) => p.answers.some(matches))
+    if (part) {
       lastAnswerMidi = midi
-      settle(true, '', [{ ...hit, label: question.answerLabel, tone: 'good' }])
+      remainingParts = remainingParts.filter((p) => p !== part)
+      found = [...found, { ...part.answers.find(matches)!, label: part.label, tone: 'good' }]
+      feedback = []
+      message = ''
+      if (!remainingParts.length) settle(true)
       return
     }
+    // Playing a chord note that has already been found is not a mistake.
+    if (question.parts.some((p) => p.answers.some(matches))) return
 
     // Show where the wrong note was: the tapped spot, or the played pitch on the string being asked about.
     const string = tapped?.string ?? question.highlightString
@@ -148,8 +175,7 @@
 
   function finish() {
     phase = 'done'
-    store.markPracticed()
-    if (score > (store.player.best[exercise.id] ?? 0)) store.player.best[exercise.id] = score
+    store.finishRound(mode, score, results.filter(Boolean).length)
   }
 
   function quit() {
@@ -189,7 +215,7 @@
     {#each EXERCISES as option}
       <button class="mode" class:active={exercise === option} onclick={() => (exercise = option)}>
         <strong>{option.name}</strong>
-        <span class="muted">Best {store.player.best[option.id] ?? 0}</span>
+        <span class="muted">Best {store.bestScore(modeLabel(option, settings))}</span>
       </button>
     {/each}
   </div>
@@ -236,12 +262,8 @@
     </div>
     <div class="controls difficulty">
       <label>
-        Time limit
-        <select bind:value={settings.timeLimit}>
-          {#each TIME_LIMITS as seconds}
-            <option value={seconds}>{seconds ? `${seconds} seconds` : 'None'}</option>
-          {/each}
-        </select>
+        Time limit (seconds, 0 = none)
+        <input type="number" min="0" max="120" step="any" bind:value={settings.timeLimit} />
       </label>
       <label class="check">
         <input type="checkbox" bind:checked={settings.oneAttempt} />
@@ -261,13 +283,42 @@
     {#if exercise.id === 'notes'}
       <p class="muted">Red is shaky, green is solid, dark notes have not come up yet.</p>
       <Fretboard frets={settings.maxFret} markers={heatmap} />
-    {:else}
+    {:else if exercise.id === 'intervals'}
       <div class="chips">
         {#each INTERVAL_NAMES as name, i}
           {@const color = heatColor(store.player.stats[`iv:${i + 1}`])}
           <span class="chip" class:colored={color} style:background={color}>{name}</span>
         {/each}
       </div>
+    {:else}
+      <div class="chips">
+        {#each Object.keys(CHORD_TYPES) as type}
+          {@const color = groupColor(`ch:${type}:`)}
+          <span class="chip" class:colored={color} style:background={color}>{type}</span>
+        {/each}
+      </div>
+    {/if}
+  </section>
+
+  <section class="card">
+    <h3>High scores</h3>
+    <p class="muted">{mode}</p>
+    {#if leaderboard.length}
+      <table>
+        <tbody>
+          {#each leaderboard as row, i}
+            <tr>
+              <td class="muted">{i + 1}</td>
+              <td>{row.name}</td>
+              <td><strong>{row.score}</strong></td>
+              <td class="muted">{row.correct} / {ROUND_LENGTH}</td>
+              <td class="muted">{new Date(row.at).toLocaleDateString()}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {:else}
+      <p class="muted">No rounds played with these settings yet.</p>
     {/if}
   </section>
 {:else if phase === 'playing' && question}
@@ -293,7 +344,7 @@
 
     <Fretboard
       frets={settings.maxFret}
-      markers={[...question.given, ...feedback]}
+      markers={[...question.given, ...found, ...feedback]}
       highlightString={question.highlightString}
       onpick={settings.input === 'tap' ? pick : undefined}
     />
@@ -308,9 +359,10 @@
     <h2>Round complete</h2>
     <div class="target">{results.filter(Boolean).length} / {ROUND_LENGTH}</div>
     <p class="muted">first-try correct</p>
+    <p class="muted">{mode}</p>
     <p>
       Score <strong>{score}</strong> ·
-      {score > 0 && score >= (store.player.best[exercise.id] ?? 0) ? 'New best!' : `Best ${store.player.best[exercise.id] ?? 0}`}
+      {score > previousBest ? 'New best for these settings!' : `Best ${previousBest}`}
     </p>
     <div class="actions centred">
       <button class="primary" onclick={start}>Play again</button>
@@ -432,6 +484,25 @@
   .toggle.on {
     border-color: var(--accent);
     color: var(--accent);
+  }
+  .modes {
+    flex-wrap: wrap;
+  }
+  input[type='number'] {
+    width: 6rem;
+    font: inherit;
+    color: var(--text);
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-2);
+  }
+  table {
+    border-collapse: collapse;
+  }
+  td {
+    padding: 0.25rem 1.5rem 0.25rem 0;
+    font-variant-numeric: tabular-nums;
   }
   .chips {
     display: flex;

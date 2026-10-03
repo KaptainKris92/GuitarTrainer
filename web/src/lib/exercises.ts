@@ -1,6 +1,6 @@
 import type { Marker } from './Fretboard.svelte'
 import type { Settings } from './store.svelte'
-import { midiAt, NATURAL_PCS, pcName, pcOf, pcPromptName, stringName } from './theory'
+import { midiAt, NATURAL_PCS, pcName, pcOf, pcPromptName, scaleNotes, stringName } from './theory'
 
 export type Position = { string: number; fret: number }
 
@@ -13,9 +13,14 @@ export type Question = {
   highlightString?: number
   /** Markers shown with the question, such as an interval's root. */
   given: Marker[]
+  /** The notes to find; most questions have one, chords have several (in any order). */
+  parts: Part[]
+}
+
+export type Part = {
+  label: string
   /** Every position that counts as correct. */
   answers: Position[]
-  answerLabel: string
 }
 
 export type Exercise = {
@@ -25,6 +30,20 @@ export type Exercise = {
   /** Everything this exercise can ask under the current settings; progress is tracked per key. */
   keys(settings: Settings): string[]
   question(key: string, settings: Settings, rand?: () => number): Question
+  /** Settings beyond the shared ones that change this exercise's difficulty, for separating high scores. */
+  modeDetails?(settings: Settings): string[]
+}
+
+/** Describes the exercise and difficulty settings of a round; high scores are kept per mode. */
+export function modeLabel(exercise: Exercise, settings: Settings): string {
+  return [
+    exercise.name,
+    settings.input === 'mic' ? 'guitar' : 'tap',
+    `${settings.maxFret} frets`,
+    ...(exercise.modeDetails?.(settings) ?? []),
+    settings.timeLimit ? `${settings.timeLimit}s limit` : 'no time limit',
+    ...(settings.oneAttempt ? ['one attempt'] : []),
+  ].join(' · ')
 }
 
 const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th']
@@ -66,10 +85,14 @@ export const findTheNote: Exercise = {
       speech: `${SPOKEN_PCS[+pc]}. ${SPOKEN_ORDINALS[+string - 1]} string${spokenWhere}`,
       highlightString: +string,
       given: [],
-      answers,
-      answerLabel: pcName(+pc),
+      parts: [{ label: pcName(+pc), answers }],
     }
   },
+
+  modeDetails: ({ naturalsOnly, strings }) => [
+    naturalsOnly ? 'naturals' : 'all notes',
+    strings.length === 6 ? 'all strings' : `strings ${strings.join(',')}`,
+  ],
 }
 
 export const INTERVAL_NAMES = [
@@ -119,10 +142,52 @@ export const findTheInterval: Exercise = {
       subtitle: `above the marked ${pcName(rootPc)}`,
       speech: `${SPOKEN_INTERVALS[semitones - 1]} above ${SPOKEN_PCS[rootPc]}`,
       given: [{ ...root, label: pcName(rootPc), tone: 'root' }],
-      answers,
-      answerLabel: pcName(pcOf(target)),
+      parts: [{ label: pcName(pcOf(target)), answers }],
     }
   },
 }
 
-export const EXERCISES = [findTheNote, findTheInterval]
+const CHORD_ROOTS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
+export const CHORD_TYPES: Record<string, string[]> = {
+  major: ['1', '3', '5'],
+  minor: ['1', 'b3', '5'],
+  diminished: ['1', 'b3', 'b5'],
+  augmented: ['1', '3', '#5'],
+  'major 7th': ['1', '3', '5', '7'],
+  'dominant 7th': ['1', '3', '5', 'b7'],
+  'minor 7th': ['1', 'b3', '5', 'b7'],
+}
+
+const pretty = (text: string) => text.replaceAll('b', '♭').replaceAll('#', '♯')
+const spoken = (root: string) => root.replace('b', ' flat').replace('#', ' sharp')
+
+export const buildTheChord: Exercise = {
+  id: 'chords',
+  name: 'Build the chord',
+  blurb: 'You are given a chord. Find each of its notes, one at a time, anywhere on the neck and in any order.',
+
+  keys: () => Object.keys(CHORD_TYPES).flatMap((type) => CHORD_ROOTS.map((root) => `ch:${type}:${root}`)),
+
+  question(key, { maxFret }) {
+    const [, type, root] = key.split(':')
+    const parts = scaleNotes(root, CHORD_TYPES[type]).map((note) => {
+      const answers: Position[] = []
+      for (let string = 1; string <= 6; string++) {
+        for (let fret = 0; fret <= maxFret; fret++) {
+          if (pcOf(midiAt(string, fret)) === note.pc) answers.push({ string, fret })
+        }
+      }
+      return { label: note.name, answers }
+    })
+    return {
+      key,
+      title: `${pretty(root)} ${type}`,
+      subtitle: `find its notes: ${CHORD_TYPES[type].map(pretty).join(' – ')}`,
+      speech: `${spoken(root)} ${type}`,
+      given: [],
+      parts,
+    }
+  },
+}
+
+export const EXERCISES = [findTheNote, findTheInterval, buildTheChord]

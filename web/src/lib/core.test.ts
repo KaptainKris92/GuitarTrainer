@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import library from '../data/scale_library.json'
-import { findTheInterval, findTheNote } from './exercises'
+import { buildTheChord, findTheInterval, findTheNote, modeLabel } from './exercises'
 import type { Settings } from './store.svelte'
 import { freqToNote, midiAt, scaleNotes } from './theory'
 import { mastery, nextDayStreak, NoteGate, pickKey, record, type Stats } from './trainer'
@@ -69,7 +69,7 @@ describe('exercises', () => {
     for (const maxFret of [12, 24] as const) {
       const positions = findTheNote
         .keys({ ...settings, maxFret })
-        .flatMap((key) => findTheNote.question(key, { ...settings, maxFret }).answers)
+        .flatMap((key) => findTheNote.question(key, { ...settings, maxFret }).parts[0].answers)
       expect(positions).toHaveLength(6 * (maxFret + 1))
       expect(new Set(positions.map((p) => `${p.string}:${p.fret}`)).size).toBe(positions.length)
     }
@@ -78,18 +78,32 @@ describe('exercises', () => {
   it('asks for low and high octaves separately on 24 frets', () => {
     const low = findTheNote.question('6:9', settings) // A on the low E string
     const high = findTheNote.question('6:9:h', settings)
-    expect(low.answers).toEqual([{ string: 6, fret: 5 }])
-    expect(high.answers).toEqual([{ string: 6, fret: 17 }])
+    expect(low.parts[0].answers).toEqual([{ string: 6, fret: 5 }])
+    expect(high.parts[0].answers).toEqual([{ string: 6, fret: 17 }])
   })
 
   it('builds interval questions whose answers are the right distance from the root', () => {
     for (const key of findTheInterval.keys(settings)) {
       const question = findTheInterval.question(key, settings)
       const root = question.given[0]
-      expect(question.answers.length).toBeGreaterThan(0)
-      for (const answer of question.answers) {
+      const { answers } = question.parts[0]
+      expect(answers.length).toBeGreaterThan(0)
+      for (const answer of answers) {
         expect(midiAt(answer.string, answer.fret) - midiAt(root.string, root.fret)).toBe(Number(key.slice(3)))
       }
     }
+  })
+
+  it('spells chords and accepts their notes anywhere on the neck', () => {
+    const question = buildTheChord.question('ch:minor 7th:Eb', settings)
+    expect(question.parts.map((part) => part.label)).toEqual(['E♭', 'G♭', 'B♭', 'D♭'])
+    expect(question.parts[1].answers).toContainEqual({ string: 6, fret: 2 })
+    expect(buildTheChord.keys(settings)).toHaveLength(84)
+  })
+
+  it('separates high scores by difficulty settings', () => {
+    const base = { ...settings, input: 'tap', timeLimit: 0, oneAttempt: false } as Settings
+    const variants = [base, { ...base, timeLimit: 2.5 }, { ...base, oneAttempt: true }, { ...base, naturalsOnly: true }]
+    expect(new Set(variants.map((s) => modeLabel(findTheNote, s))).size).toBe(4)
   })
 })

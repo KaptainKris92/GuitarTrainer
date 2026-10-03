@@ -14,6 +14,7 @@
   const themes = ['midnight', 'neon', 'mono', 'paper']
   let tab = $state<(typeof tabs)[number]['id']>('practice')
   let importInput: HTMLInputElement
+  let menu: HTMLDetailsElement
 
   const level = $derived(levelFor(store.player.xp))
   const levelProgress = $derived(
@@ -54,6 +55,12 @@
   }
 </script>
 
+<svelte:window
+  onclick={(event) => {
+    if (!menu.contains(event.target as Node)) menu.open = false
+  }}
+/>
+
 <header>
   <span class="brand">Guitar<b>Trainer</b></span>
   <nav>
@@ -72,14 +79,14 @@
     <span class="meter" title="Microphone level"><span style:width="{Math.min(100, mic.frame.rms * 600)}%"></span></span>
   {/if}
 
-  <details class="menu">
+  <details class="menu" bind:this={menu}>
     <summary>{store.save.current}</summary>
     <div class="panel">
       <label>
         Player
-        <select value={store.save.current} onchange={(event) => choosePlayer(event.currentTarget.value)}>
-          {#each store.playerNames as name}
-            <option>{name}</option>
+        <select onchange={(event) => choosePlayer(event.currentTarget.value)}>
+          {#each store.playerNames as name (name)}
+            <option selected={name === store.save.current}>{name}</option>
           {/each}
           <option value="+">New player…</option>
         </select>
@@ -211,6 +218,8 @@
     right: 0;
     z-index: 1;
     display: grid;
+    /* minmax(0, …) stops long option text, such as device names, widening the column. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.8rem;
     width: 16rem;
     margin-top: 0.5rem;
@@ -222,6 +231,7 @@
   }
   .panel label {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.25rem;
     font-size: 0.85rem;
     color: var(--muted);
@@ -235,6 +245,7 @@
   }
   .backup button {
     flex: 1;
+    min-width: 0;
     padding-inline: 0.4rem;
     font-size: 0.85rem;
   }

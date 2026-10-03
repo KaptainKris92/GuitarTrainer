@@ -1,9 +1,11 @@
 import { nextDayStreak, type Stats } from './trainer'
 
+/** One completed round. `mode` identifies the exercise and difficulty settings it was played with. */
+export type Round = { at: string; mode: string; score: number; correct: number }
+
 export type Player = {
   stats: Stats
-  /** Best round score per exercise. */
-  best: Record<string, number>
+  rounds: Round[]
   xp: number
   dayStreak: number
   lastDay: string
@@ -27,7 +29,7 @@ type Save = { current: string; players: Record<string, Player> }
 const SAVE_KEY = 'guitar-trainer.save'
 const SETTINGS_KEY = 'guitar-trainer.settings'
 
-const newPlayer = (): Player => ({ stats: {}, best: {}, xp: 0, dayStreak: 0, lastDay: '' })
+const newPlayer = (): Player => ({ stats: {}, rounds: [], xp: 0, dayStreak: 0, lastDay: '' })
 
 const DEFAULT_SETTINGS: Settings = {
   theme: 'midnight',
@@ -53,9 +55,15 @@ function isSave(value: unknown): value is Save {
   return !!save && typeof save.current === 'string' && !!save.players?.[save.current]
 }
 
+/** Fill in fields added since the save was written. */
+function withDefaults(save: Save): Save {
+  for (const [name, player] of Object.entries(save.players)) save.players[name] = { ...newPlayer(), ...player }
+  return save
+}
+
 function loadSave(): Save {
   const saved = read<Save>(SAVE_KEY)
-  if (isSave(saved)) return saved
+  if (isSave(saved)) return withDefaults(saved)
   // Carry over progress from before player profiles existed.
   const player = newPlayer()
   player.stats = read<Stats>('guitar-trainer.note-stats') ?? {}
@@ -93,7 +101,20 @@ class Store {
     this.save.current = name
   }
 
-  markPracticed() {
+  /** Top scores for a mode across all players, best first. */
+  leaderboard(mode: string, limit = 5) {
+    return Object.entries(this.save.players)
+      .flatMap(([name, player]) => player.rounds.filter((round) => round.mode === mode).map((round) => ({ name, ...round })))
+      .sort((a, b) => b.score - a.score || a.at.localeCompare(b.at))
+      .slice(0, limit)
+  }
+
+  bestScore(mode: string) {
+    return Math.max(0, ...this.player.rounds.filter((round) => round.mode === mode).map((round) => round.score))
+  }
+
+  finishRound(mode: string, score: number, correct: number) {
+    this.player.rounds.push({ at: new Date().toISOString(), mode, score, correct })
     const today = new Date().toLocaleDateString('sv')
     this.player.dayStreak = nextDayStreak(this.player.lastDay, this.player.dayStreak, today)
     this.player.lastDay = today
@@ -112,7 +133,7 @@ class Store {
       return false
     }
     if (!isSave(parsed)) return false
-    this.save = parsed
+    this.save = withDefaults(parsed)
     return true
   }
 }
